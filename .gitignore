@@ -2,6 +2,7 @@ __pycache__/
 *.py[cod]
 /native/target/
 /.benchmark-models/
+/dist/
 .env
 .env.*
 !.env.example
