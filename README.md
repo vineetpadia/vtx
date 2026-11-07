@@ -4,6 +4,25 @@ VTX is a local 3D viewer. The standalone app opens STL, OBJ, PLY, glTF, GLB, FBX
 
 The native core is a fork of [Formlabs Foxtrot](https://github.com/formlabs/foxtrot/tree/69fb37688892246e670fc08eb60b7d3a92d70d3f). The upstream MIT and Apache 2.0 licenses are in [native](native/). The fork retains Foxtrot’s tessellation settings and supported geometry. On the Raspberry Pi benchmark both builds reported 14 counted tessellation errors, so their matching meshes share gaps. Open CASCADE mode has separate coverage and quality settings.
 
+The following comparisons are recorded development benchmarks on the same Windows Core i9-12900K with a warm OS file cache. Each row compares the same input file through the listed output. The benchmarks span different VTX revisions, and each speedup uses its own paired measurements. Times are medians in milliseconds. The format sections below give trial counts, reader settings, and geometry verification details.
+
+| Format and fixture | Compared project | Reference, ms | VTX, ms | Speedup | Timed output |
+|---|---|---:|---:|---:|---|
+| [STEP, Raspberry Pi 3](step_indexed_foxtrot.csv) | [Foxtrot](https://github.com/formlabs/foxtrot/tree/69fb37688892246e670fc08eb60b7d3a92d70d3f) | 258.17 | 125.07 | 2.06× | Tessellated geometry |
+| [STL, 2-million-triangle grid](benchmark_stl.py) | [pyvista-stl 0.5.3](https://github.com/pyvista/pyvista-stl) with NumPy expansion | 111.06 | 49.65 | 2.24× | Packed triangle positions |
+| [OBJ, Rungholt geometry](obj_benchmark_current.csv) | [RapidOBJ](https://github.com/guybrush77/rapidobj/tree/ccca1622432a3aeb2fb85ff9085219d008d11afc) | 196.85 | 60.55 | 3.25× | Triangulated geometry |
+| [OBJ, Rungholt with materials](obj_material_benchmark.csv) | [RapidOBJ](https://github.com/guybrush77/rapidobj/tree/ccca1622432a3aeb2fb85ff9085219d008d11afc) | 117.56 | 81.95 | 1.43× | Geometry and material assignments |
+| [PLY, 6-million-point RGB cloud](ply_benchmark.csv) | [Tinyply 3.0](https://github.com/ddiakopoulos/tinyply/tree/c9bb690dfe5e9105961e9e28120c48c9ae084bc6) | 185.84 | 16.96 | 10.95× | Positions and RGB bytes |
+| [GLB, 2-million-triangle grid](gltf_benchmark.csv) | [FastGLTF](https://github.com/spnda/fastgltf/tree/7ed89f6a2e3119bf6721149bfee7ec54658a90b5) | 37.88 | 17.70 | 2.14× | Indexed geometry and scene transforms |
+| [IFC4.3, buildingSMART bridge](ifc_native_benchmark.csv) | [IFClite 28.2.0](https://crates.io/crates/ifc-lite-processing/28.2.0) default full pass | 21.03 | 12.24 | 1.72× | Geometry and draw plan |
+| [3MF, 500,000-triangle textured grid](three_mf_xml_benchmark.csv) | [lib3mf 2.5.0](https://github.com/3MFConsortium/lib3mf/releases/tag/v2.5.0) | 641.38 | 260.41 | 2.46× | Placed geometry and material data |
+| [3MF, eight-part grid, 4 million triangles](three_mf_xml_benchmark.csv) | [lib3mf 2.5.0](https://github.com/3MFConsortium/lib3mf/releases/tag/v2.5.0) | 2,399.98 | 114.80 | 20.91× | Placed geometry |
+| [SLDPRT, NIST CTC-02](solidworks_native_benchmark.csv) | [sldprt-export](https://github.com/XRTC5/sldprt-export/tree/31d3b5a9b115d9cbfc19bbf10906fcc29e8e3c57) | 43.51 | 2.87 | 15.14× | Saved display mesh |
+
+The speedups use unrounded medians. These intervals cover file reading and import through the listed output. Viewer startup, GPU upload, and first-frame measurements appear in the standalone viewer section. Linked CSVs contain individual trials, and the STL link contains its reproduction harness. The STL row uses VTX's JavaScript decoder under Node.js. Its reference includes expansion from pyvista-stl's indexed mesh into the same packed triangle layout. pyvista-stl's indexed result alone took 60.66 ms in that run.
+
+Reader coverage also differs. RapidOBJ's default loader reads authored normals and other OBJ attributes beyond VTX's geometry path. VTX uses IFClite for IFC geometry, with metadata filtering, worker settings, and draw planning optimized for viewing. VTX uses ufbx for FBX import. The STEP comparison retains the same 14 counted tessellation errors in both builds. The per-format sections describe the matching geometry checks and supported features.
+
 ## Run the standalone viewer
 
 Build with Rust, Cargo, and the platform's C and C++ toolchain. On macOS, install the Xcode Command Line Tools.
