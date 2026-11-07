@@ -1,3 +1,5 @@
+mod drawing;
+mod inspect;
 mod model;
 mod render;
 
@@ -289,6 +291,9 @@ impl ApplicationHandler<Loaded> for App {
                 if scene.triangles > 0 {
                     title.push_str(&format!("  ·  {} triangles", scene.triangles));
                 }
+                if scene.line_segments > 0 {
+                    title.push_str(&format!("  ·  {} line segments", scene.line_segments));
+                }
                 if scene.points > 0 {
                     title.push_str(&format!("  ·  {} points", scene.points));
                 }
@@ -300,8 +305,12 @@ impl ApplicationHandler<Loaded> for App {
                     title.push_str(&format!("  ·  {} import warnings", scene.issues));
                 }
                 viewer.window.set_title(&title);
+                viewer.camera = if scene.source_info["kind"] == "drawing_2d" {
+                    inspect::plan_camera()
+                } else {
+                    Camera::default()
+                };
                 viewer.scene = Some(scene);
-                viewer.camera = Camera::default();
                 viewer.first_frame = Some(loaded.started);
                 viewer.window.request_redraw();
             }
@@ -341,14 +350,22 @@ impl ApplicationHandler<Loaded> for App {
                         && (viewer.modifiers.control_key() || viewer.modifiers.super_key())
                     {
                         let path = rfd::FileDialog::new()
-                            .add_filter("3D models", model::FORMATS)
+                            .add_filter("Models and drawings", model::FORMATS)
                             .set_parent(&*viewer.window)
                             .pick_file();
                         if let Some(path) = path {
                             self.open(path);
                         }
                     } else if key.eq_ignore_ascii_case("r") {
-                        viewer.camera = Camera::default();
+                        viewer.camera = if viewer
+                            .scene
+                            .as_ref()
+                            .is_some_and(|s| s.source_info["kind"] == "drawing_2d")
+                        {
+                            inspect::plan_camera()
+                        } else {
+                            Camera::default()
+                        };
                         viewer.window.request_redraw();
                     }
                 }
@@ -397,6 +414,16 @@ pub fn run() -> Result<()> {
             .ok_or("Usage: vtx --check MODEL [SCREENSHOT.png]")?;
         let screenshot = args.next();
         return render::check(Path::new(&path), screenshot.as_deref().map(Path::new));
+    }
+    if startup.as_deref().is_some_and(|arg| arg == "--inspect") {
+        return inspect::run(args.collect());
+    }
+    if startup
+        .as_deref()
+        .is_some_and(|arg| arg == "--help" || arg == "-h")
+    {
+        println!("VTX: vtx [MODEL] | --check MODEL [PNG]\n{}", inspect::USAGE);
+        return Ok(());
     }
     let event_loop = EventLoop::<Loaded>::with_user_event().build()?;
     let mut app = App {

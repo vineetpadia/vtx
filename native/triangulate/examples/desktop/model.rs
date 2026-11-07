@@ -19,7 +19,7 @@ type Triangle = [u32; 3];
 
 pub const FORMATS: &[&str] = &[
     "stl", "obj", "ply", "glb", "gltf", "fbx", "step", "stp", "p21", "3mf", "sldprt", "sldasm",
-    "ifc", "ifczip", "igs", "iges",
+    "ifc", "ifczip", "igs", "iges", "dxf", "dwg",
 ];
 
 #[derive(Clone)]
@@ -89,6 +89,7 @@ pub struct Part {
     pub material: wgpu::BindGroup,
     pub count: u32,
     pub points: bool,
+    pub lines: bool,
     pub obj_corners: bool,
     pub instances: Option<Instances>,
 }
@@ -104,7 +105,11 @@ pub struct Scene {
     pub parts: Vec<Part>,
     pub center: [f32; 3],
     pub diameter: f32,
+    pub bounds: [[f32; 3]; 2],
+    pub source_info: serde_json::Value,
+    pub part_metadata: Vec<serde_json::Value>,
     pub triangles: usize,
+    pub line_segments: usize,
     pub points: usize,
     pub issues: usize,
     pub notice: Option<&'static str>,
@@ -158,6 +163,7 @@ impl Uploader {
         has_vertex_colors: bool,
         has_uv: bool,
         transform: [f32; 4],
+        part_id: usize,
     ) -> Result<wgpu::BindGroup> {
         let texture = style.texture.filter(|_| has_uv).unwrap_or(&self.white);
         let mut uniform = [
@@ -179,6 +185,8 @@ impl Uploader {
             uniform[6] = if style.encoded_texture { 2.0 } else { 1.0 };
         }
         uniform[8..].copy_from_slice(&transform);
+        let mut uniform = uniform.to_vec();
+        uniform.extend_from_slice(&[part_id as f32, 0.0, 0.0, 0.0]);
         let uniform = self.buffer(bytemuck::cast_slice(&uniform), wgpu::BufferUsages::UNIFORM)?;
         Ok(self.device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("VTX part material"),
@@ -576,6 +584,7 @@ impl Builder<'_> {
             colors.is_some(),
             uv.is_some(),
             [1.0, 1.0, 0.0, 0.0],
+            self.scene.parts.len() + 1,
         )?;
         let count = if indices.is_some() {
             triangle_count * 3
@@ -589,6 +598,7 @@ impl Builder<'_> {
             material,
             count: u32::try_from(count)?,
             points: cloud,
+            lines: false,
             obj_corners: false,
             instances,
         });
@@ -645,6 +655,7 @@ impl Builder<'_> {
             false,
             false,
             [1.0, 1.0, 0.0, 0.0],
+            self.scene.parts.len() + 1,
         )?;
         self.scene.parts.push(Part {
             positions,
@@ -652,6 +663,7 @@ impl Builder<'_> {
             material,
             count,
             points: false,
+            lines: false,
             obj_corners: false,
             instances: None,
         });
@@ -687,7 +699,11 @@ pub fn load(path: &Path, uploader: &UploadTarget) -> Result<Scene> {
             parts: Vec::new(),
             center: [0.0; 3],
             diameter: 0.0,
+            bounds: [[0.0; 3]; 2],
+            source_info: serde_json::Value::Null,
+            part_metadata: Vec::new(),
             triangles: 0,
+            line_segments: 0,
             points: 0,
             issues: 0,
             notice: None,
@@ -807,6 +823,7 @@ pub fn load(path: &Path, uploader: &UploadTarget) -> Result<Scene> {
                             false,
                             texture.is_some(),
                             map.map_or([1.0, 1.0, 0.0, 0.0], |map| map.transform),
+                            builder.scene.parts.len() + 1,
                         )?;
                         builder.scene.parts.push(Part {
                             positions: corners,
@@ -814,6 +831,7 @@ pub fn load(path: &Path, uploader: &UploadTarget) -> Result<Scene> {
                             material,
                             count,
                             points: false,
+                            lines: false,
                             obj_corners: true,
                             instances: None,
                         });
@@ -1062,6 +1080,42 @@ pub fn load(path: &Path, uploader: &UploadTarget) -> Result<Scene> {
                 },
             )?;
         }
+        "dxf" | "dwg" => {
+            let drawing = super::drawing::load(path)?;
+            builder.scene.issues = drawing.source_info["warnings"]
+                .as_array()
+                .map_or(0, Vec::len);
+            builder.scene.notice = Some("2D modelspace projection");
+            builder.scene.source_info = drawing.source_info;
+            for part in drawing.parts {
+                let cloud = part.kind == "points";
+                let lines = part.kind == "lines";
+                if lines && part.positions.len() % 2 != 0 {
+                    return Err("Invalid drawing line vertices".into());
+                }
+                if part.positions.is_empty() {
+                    continue;
+                }
+                // Line-list upload uses the point path to avoid interpreting vertices as triangles.
+                builder.add(
+                    &part.positions,
+                    &[],
+                    cloud || lines,
+                    Style {
+                        color: Some(part.color),
+                        ..Default::default()
+                    },
+                )?;
+                let uploaded = builder.scene.parts.last_mut().unwrap();
+                uploaded.lines = lines;
+                if lines {
+                    uploaded.points = false;
+                    builder.scene.points -= part.positions.len();
+                    builder.scene.line_segments += part.positions.len() / 2;
+                }
+                builder.scene.part_metadata.push(part.metadata);
+            }
+        }
         "stl" => builder.add(&read_stl(&fs::read(path)?)?, &[], false, Style::default())?,
         _ => return Err("Unsupported desktop model format".into()),
     }
@@ -1069,6 +1123,7 @@ pub fn load(path: &Path, uploader: &UploadTarget) -> Result<Scene> {
         return Err("The model contains no drawable geometry".into());
     }
     let spans = [0, 1, 2].map(|i| f64::from(builder.max[i]) - f64::from(builder.min[i]));
+    builder.scene.bounds = [builder.min, builder.max];
     builder.scene.center = [0, 1, 2].map(|i| builder.min[i] * 0.5 + builder.max[i] * 0.5);
     builder.scene.diameter = spans
         .iter()

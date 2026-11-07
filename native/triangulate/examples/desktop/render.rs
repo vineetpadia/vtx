@@ -1,4 +1,4 @@
-use std::{path::Path, time::Instant};
+use std::{convert::TryInto, path::Path, time::Instant};
 
 use wgpu::util::DeviceExt;
 
@@ -19,6 +19,9 @@ pub struct Camera {
     pub yaw: f32,
     pub pitch: f32,
     pub zoom: f32,
+    pub orthographic: bool,
+    pub target: Option<([f32; 3], f32)>,
+    pub section: Option<[f32; 4]>,
 }
 
 impl Default for Camera {
@@ -27,6 +30,9 @@ impl Default for Camera {
             yaw: -0.6,
             pitch: 0.4,
             zoom: 1.0,
+            orthographic: false,
+            target: None,
+            section: None,
         }
     }
 }
@@ -39,6 +45,11 @@ pub struct Renderer {
     obj_corners: wgpu::RenderPipeline,
     points: wgpu::RenderPipeline,
     identity: wgpu::Buffer,
+    lines: wgpu::RenderPipeline,
+    query_triangles: wgpu::RenderPipeline,
+    query_obj: wgpu::RenderPipeline,
+    query_points: wgpu::RenderPipeline,
+    query_lines: wgpu::RenderPipeline,
 }
 
 pub fn initialize<T>(mut create: impl FnMut(&wgpu::Instance) -> Result<T>) -> Result<T> {
@@ -108,7 +119,7 @@ impl Renderer {
             label: Some("VTX camera layout"),
             entries: &[buffer_entry(
                 0,
-                wgpu::ShaderStages::VERTEX,
+                wgpu::ShaderStages::VERTEX_FRAGMENT,
                 wgpu::BufferBindingType::Uniform,
             )],
         });
@@ -157,43 +168,65 @@ impl Renderer {
             label: Some("VTX mesh shader"),
             source: wgpu::ShaderSource::Wgsl(include_str!("mesh.wgsl").into()),
         });
-        let pipeline =
-            |topology, fragment, entry_point, buffers: &[wgpu::VertexBufferLayout<'_>]| {
-                device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-                    label: Some("VTX geometry pipeline"),
-                    layout: Some(&pipeline_layout),
-                    vertex: wgpu::VertexState {
-                        module: &shader,
-                        entry_point: Some(entry_point),
-                        compilation_options: Default::default(),
-                        buffers,
-                    },
-                    primitive: wgpu::PrimitiveState {
-                        topology,
-                        ..Default::default()
-                    },
-                    depth_stencil: Some(wgpu::DepthStencilState {
-                        format: DEPTH,
-                        depth_write_enabled: true,
-                        depth_compare: wgpu::CompareFunction::LessEqual,
-                        stencil: Default::default(),
-                        bias: Default::default(),
+        let pipeline = |topology,
+                        fragment,
+                        entry_point,
+                        buffers: &[wgpu::VertexBufferLayout<'_>],
+                        query: bool| {
+            device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                label: Some("VTX geometry pipeline"),
+                layout: Some(&pipeline_layout),
+                vertex: wgpu::VertexState {
+                    module: &shader,
+                    entry_point: Some(entry_point),
+                    compilation_options: Default::default(),
+                    buffers,
+                },
+                primitive: wgpu::PrimitiveState {
+                    topology,
+                    ..Default::default()
+                },
+                depth_stencil: Some(wgpu::DepthStencilState {
+                    format: DEPTH,
+                    depth_write_enabled: true,
+                    depth_compare: wgpu::CompareFunction::LessEqual,
+                    stencil: Default::default(),
+                    bias: Default::default(),
+                }),
+                multisample: Default::default(),
+                fragment: Some(wgpu::FragmentState {
+                    module: &shader,
+                    entry_point: Some(if query {
+                        if fragment == "surface" {
+                            "query_surface"
+                        } else {
+                            "query_point"
+                        }
+                    } else {
+                        fragment
                     }),
-                    multisample: Default::default(),
-                    fragment: Some(wgpu::FragmentState {
-                        module: &shader,
-                        entry_point: Some(fragment),
-                        compilation_options: Default::default(),
-                        targets: &[Some(wgpu::ColorTargetState {
+                    compilation_options: Default::default(),
+                    targets: &if query {
+                        vec![
+                            Some(wgpu::ColorTargetState {
+                                format: wgpu::TextureFormat::Rgba32Float,
+                                blend: None,
+                                write_mask: wgpu::ColorWrites::ALL
+                            });
+                            2
+                        ]
+                    } else {
+                        vec![Some(wgpu::ColorTargetState {
                             format,
                             blend: None,
                             write_mask: wgpu::ColorWrites::ALL,
-                        })],
-                    }),
-                    multiview: None,
-                    cache: None,
-                })
-            };
+                        })]
+                    },
+                }),
+                multiview: None,
+                cache: None,
+            })
+        };
         let mesh_layout = [
             wgpu::VertexBufferLayout {
                 array_stride: 12,
@@ -211,22 +244,61 @@ impl Renderer {
             "surface",
             "vertex",
             &mesh_layout,
+            false,
         );
         let points = pipeline(
             wgpu::PrimitiveTopology::PointList,
             "point",
             "vertex",
             &mesh_layout,
+            false,
         );
+        let obj_layout = [wgpu::VertexBufferLayout {
+            array_stride: 8,
+            step_mode: wgpu::VertexStepMode::Vertex,
+            attributes: &wgpu::vertex_attr_array![0 => Uint32x2],
+        }];
         let obj_corners = pipeline(
             wgpu::PrimitiveTopology::TriangleList,
             "surface",
             "obj_vertex",
-            &[wgpu::VertexBufferLayout {
-                array_stride: 8,
-                step_mode: wgpu::VertexStepMode::Vertex,
-                attributes: &wgpu::vertex_attr_array![0 => Uint32x2],
-            }],
+            &obj_layout,
+            false,
+        );
+        let lines = pipeline(
+            wgpu::PrimitiveTopology::LineList,
+            "point",
+            "vertex",
+            &mesh_layout,
+            false,
+        );
+        let query_triangles = pipeline(
+            wgpu::PrimitiveTopology::TriangleList,
+            "surface",
+            "vertex",
+            &mesh_layout,
+            true,
+        );
+        let query_obj = pipeline(
+            wgpu::PrimitiveTopology::TriangleList,
+            "surface",
+            "obj_vertex",
+            &obj_layout,
+            true,
+        );
+        let query_points = pipeline(
+            wgpu::PrimitiveTopology::PointList,
+            "point",
+            "vertex",
+            &mesh_layout,
+            true,
+        );
+        let query_lines = pipeline(
+            wgpu::PrimitiveTopology::LineList,
+            "point",
+            "vertex",
+            &mesh_layout,
+            true,
         );
         let identity = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("VTX identity placement"),
@@ -239,7 +311,7 @@ impl Renderer {
         });
         let camera = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("VTX camera"),
-            size: 48,
+            size: 64,
             mapped_at_creation: false,
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
         });
@@ -289,6 +361,11 @@ impl Renderer {
             obj_corners,
             points,
             identity,
+            lines,
+            query_triangles,
+            query_obj,
+            query_points,
+            query_lines,
         })
     }
 
@@ -317,27 +394,75 @@ impl Renderer {
         camera: &Camera,
         aspect: f32,
     ) {
+        self.draw_pass(encoder, color, depth, scene, camera, aspect, None);
+    }
+
+    fn draw_pass(
+        &self,
+        encoder: &mut wgpu::CommandEncoder,
+        color: &wgpu::TextureView,
+        depth: &wgpu::TextureView,
+        scene: Option<&Scene>,
+        camera: &Camera,
+        aspect: f32,
+        query: Option<&wgpu::TextureView>,
+    ) {
         if let Some(scene) = scene {
-            let [x, y, z] = scene.center;
-            let scale = 0.9 * aspect.min(1.0) * camera.zoom / scene.diameter;
+            let (center, diameter) = camera.target.unwrap_or((scene.center, scene.diameter));
+            let [x, y, z] = center;
+            let scale = 0.9 * aspect.min(1.0) * camera.zoom / diameter;
             let (sy, cy) = camera.yaw.sin_cos();
             let (sx, cx) = camera.pitch.sin_cos();
-            let data = [x, y, z, scale, cy, sy, cx, sx, aspect, 0.0, 0.0, 0.0];
+            let data = [
+                x,
+                y,
+                z,
+                scale,
+                cy,
+                sy,
+                cx,
+                sx,
+                aspect,
+                u8::from(camera.orthographic) as f32,
+                diameter / scene.diameter,
+                u8::from(camera.section.is_some()) as f32,
+            ];
+            let data: Vec<f32> = data
+                .iter()
+                .copied()
+                .chain(camera.section.unwrap_or([0.0; 4]).iter().copied())
+                .collect();
             self.uploader
                 .queue
                 .write_buffer(&self.camera, 0, bytemuck::cast_slice(&data));
         }
-        let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-            label: Some("VTX frame"),
-            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                view: color,
+        let mut attachments = vec![Some(wgpu::RenderPassColorAttachment {
+            view: color,
+            depth_slice: None,
+            resolve_target: None,
+            ops: wgpu::Operations {
+                load: wgpu::LoadOp::Clear(if query.is_some() {
+                    wgpu::Color::TRANSPARENT
+                } else {
+                    CLEAR
+                }),
+                store: wgpu::StoreOp::Store,
+            },
+        })];
+        if let Some(view) = query {
+            attachments.push(Some(wgpu::RenderPassColorAttachment {
+                view,
                 depth_slice: None,
                 resolve_target: None,
                 ops: wgpu::Operations {
-                    load: wgpu::LoadOp::Clear(CLEAR),
+                    load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
                     store: wgpu::StoreOp::Store,
                 },
-            })],
+            }));
+        }
+        let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            label: Some("VTX frame"),
+            color_attachments: &attachments,
             depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
                 view: depth,
                 depth_ops: Some(wgpu::Operations {
@@ -350,13 +475,18 @@ impl Renderer {
         });
         if let Some(scene) = scene {
             for part in &scene.parts {
-                pass.set_pipeline(if part.obj_corners {
-                    &self.obj_corners
-                } else if part.points {
-                    &self.points
-                } else {
-                    &self.triangles
-                });
+                pass.set_pipeline(
+                    match (query.is_some(), part.obj_corners, part.points, part.lines) {
+                        (true, true, _, _) => &self.query_obj,
+                        (true, _, true, _) => &self.query_points,
+                        (true, _, _, true) => &self.query_lines,
+                        (true, _, _, _) => &self.query_triangles,
+                        (_, true, _, _) => &self.obj_corners,
+                        (_, _, true, _) => &self.points,
+                        (_, _, _, true) => &self.lines,
+                        _ => &self.triangles,
+                    },
+                );
                 pass.set_bind_group(0, &self.camera_group, &[]);
                 pass.set_bind_group(1, &part.material, &[]);
                 pass.set_vertex_buffer(0, part.positions.slice(..));
@@ -495,4 +625,164 @@ pub fn check(path: &Path, screenshot: Option<&Path>) -> Result<()> {
         scene.triangles, scene.points, visible, scene.issues);
     eprintln!("GPU: {}", info.name);
     Ok(())
+}
+
+/// Render into an RGBA image without a window or display server.
+pub fn snapshot(
+    renderer: &Renderer,
+    scene: &Scene,
+    camera: &Camera,
+    width: u32,
+    height: u32,
+) -> Result<image::RgbaImage> {
+    let device = &renderer.uploader.device;
+    if width == 0 || height == 0 || width.max(height) > device.limits().max_texture_dimension_2d {
+        return Err("Invalid snapshot dimensions for this GPU".into());
+    }
+    let size = extent(width, height);
+    let color = device.create_texture(&wgpu::TextureDescriptor {
+        label: Some("VTX snapshot"),
+        size,
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format: wgpu::TextureFormat::Rgba8UnormSrgb,
+        usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
+        view_formats: &[],
+    });
+    let stride = (width * 4).next_multiple_of(wgpu::COPY_BYTES_PER_ROW_ALIGNMENT);
+    let readback = device.create_buffer(&wgpu::BufferDescriptor {
+        label: Some("VTX snapshot readback"),
+        size: u64::from(stride) * u64::from(height),
+        usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
+        mapped_at_creation: false,
+    });
+    let mut encoder = device.create_command_encoder(&Default::default());
+    renderer.draw(
+        &mut encoder,
+        &color.create_view(&Default::default()),
+        &renderer.depth(width, height),
+        Some(scene),
+        camera,
+        width as f32 / height as f32,
+    );
+    encoder.copy_texture_to_buffer(
+        color.as_image_copy(),
+        wgpu::TexelCopyBufferInfo {
+            buffer: &readback,
+            layout: wgpu::TexelCopyBufferLayout {
+                offset: 0,
+                bytes_per_row: Some(stride),
+                rows_per_image: Some(height),
+            },
+        },
+        size,
+    );
+    renderer.uploader.queue.submit([encoder.finish()]);
+    let slice = readback.slice(..);
+    let (send, receive) = std::sync::mpsc::sync_channel(1);
+    slice.map_async(wgpu::MapMode::Read, move |status| {
+        let _ = send.send(status);
+    });
+    device.poll(wgpu::PollType::Wait)?;
+    receive.recv()??;
+    let mapped = slice.get_mapped_range();
+    let mut pixels = Vec::with_capacity((width * height * 4) as usize);
+    for row in mapped.chunks_exact(stride as usize) {
+        pixels.extend_from_slice(&row[..width as usize * 4]);
+    }
+    Ok(image::RgbaImage::from_raw(width, height, pixels).ok_or("Invalid GPU image buffer")?)
+}
+
+/// Query only requested pixels; avoid downloading full position/normal images.
+pub fn query_pixels(
+    renderer: &Renderer,
+    scene: &Scene,
+    camera: &Camera,
+    size: u32,
+    pixels: &[[u32; 2]],
+) -> Result<Vec<serde_json::Value>> {
+    if pixels.is_empty() {
+        return Ok(Vec::new());
+    }
+    let device = &renderer.uploader.device;
+    let textures: Vec<_> = (0..2)
+        .map(|_| {
+            device.create_texture(&wgpu::TextureDescriptor {
+                label: Some("VTX geometry query"),
+                size: extent(size, size),
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format: wgpu::TextureFormat::Rgba32Float,
+                usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
+                view_formats: &[],
+            })
+        })
+        .collect();
+    let views: Vec<_> = textures
+        .iter()
+        .map(|t| t.create_view(&Default::default()))
+        .collect();
+    let buffer = device.create_buffer(&wgpu::BufferDescriptor {
+        label: Some("VTX query readback"),
+        size: pixels.len() as u64 * 512,
+        usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
+        mapped_at_creation: false,
+    });
+    let mut encoder = device.create_command_encoder(&Default::default());
+    renderer.draw_pass(
+        &mut encoder,
+        &views[0],
+        &renderer.depth(size, size),
+        Some(scene),
+        camera,
+        1.0,
+        Some(&views[1]),
+    );
+    for (index, &[x, y]) in pixels.iter().enumerate() {
+        if x >= size || y >= size {
+            return Err("Query pixel is outside the model viewport".into());
+        }
+        for (attachment, texture) in textures.iter().enumerate() {
+            encoder.copy_texture_to_buffer(
+                wgpu::TexelCopyTextureInfo {
+                    texture,
+                    mip_level: 0,
+                    origin: wgpu::Origin3d { x, y, z: 0 },
+                    aspect: wgpu::TextureAspect::All,
+                },
+                wgpu::TexelCopyBufferInfo {
+                    buffer: &buffer,
+                    layout: wgpu::TexelCopyBufferLayout {
+                        offset: (index * 512 + attachment * 256) as u64,
+                        bytes_per_row: Some(256),
+                        rows_per_image: Some(1),
+                    },
+                },
+                extent(1, 1),
+            );
+        }
+    }
+    renderer.uploader.queue.submit([encoder.finish()]);
+    let slice = buffer.slice(..);
+    let (send, receive) = std::sync::mpsc::sync_channel(1);
+    slice.map_async(wgpu::MapMode::Read, move |status| {
+        let _ = send.send(status);
+    });
+    device.poll(wgpu::PollType::Wait)?;
+    receive.recv()??;
+    let data = slice.get_mapped_range();
+    Ok(pixels.iter().enumerate().map(|(index,pixel)| {
+        let at = index * 512;
+        let value = |offset| f32::from_le_bytes(data[offset..offset+4].try_into().unwrap());
+        let part = value(at+12) as usize;
+        if part == 0 { return serde_json::json!({"pixel":pixel,"hit":false}); }
+        let normal = [value(at+256),value(at+260),value(at+264)];
+        serde_json::json!({"pixel":pixel, "hit":true, "position": [value(at),value(at+4),value(at+8)],
+            "normal": if normal == [0.0;3] {None} else {Some(normal)}, "part_id":part,
+            "instance_index": (value(at+268) as u32).saturating_sub(1),
+            "part":scene.part_metadata.get(part-1),
+            "normal_convention":"camera-facing geometric surface normal; null for lines/points"})
+    }).collect())
 }

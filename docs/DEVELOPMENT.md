@@ -15,6 +15,10 @@ Windows executable: `native\target\release\examples\vtx.exe`.
 
 VTX uses Metal on Mac, Vulkan on Linux, and Vulkan with a Direct3D 12 fallback on Windows. `WGPU_BACKEND=dx12` selects Direct3D 12 on Windows. For GPU checks and diagnostic timings, use `vtx --check MODEL [SCREENSHOT.png]`.
 
+For automated visual analysis, use `vtx --inspect MODEL --output DIR`. See [inspection exports](INSPECTION.md) for detail framing, sections, and pixel queries.
+
+For optional DXF/DWG 2D drawing previews, see [drawing support](DRAWINGS.md). The Python bridge is embedded in the binary; ezdxf/Pillow and the separate LibreDWG converter are installed independently.
+
 ## Release packages
 
 The [Desktop releases workflow](../.github/workflows/release.yml) builds Windows x64, Linux x64, Mac Apple silicon, and Mac Intel packages. Push a version tag, such as `v0.1.1`, or run the workflow with a new version. It publishes archives and SHA-256 files to GitHub Releases after all four builds succeed.
@@ -54,3 +58,13 @@ python fetch_benchmark_models.py pine-tree-fbx voron-step a-beautiful-game rungh
 ```
 
 On Windows with the `x86_64-pc-windows-gnullvm` Rust toolchain, install its `rust-mingw` component, use `RUSTFLAGS=-C linker=rust-lld`, and keep that toolchain's `libunwind.dll` beside the executable or on PATH. Official Windows packages use MSVC.
+
+## Inspection regression tests
+
+The example test suite includes camera convention, scale-bar, and CLI validation tests. One explicitly ignored GPU integration test exports a translated 40 × 20 × 10 box at an odd pixel width, checks rendered dimensions against the scale, checks the manifest/contact sheet, and verifies overwrite refusal. It also verifies visible world positions, camera-facing normals from opposite sides, background misses, detail framing, and consistent section clipping between images and queries.
+
+```sh
+cargo test --manifest-path native/Cargo.toml --locked --release -p triangulate --features parallel,desktop --example vtx
+# Include the GPU test on a machine with an available adapter:
+cargo test --manifest-path native/Cargo.toml --locked --release -p triangulate --features parallel,desktop --example vtx -- --include-ignored
+```
