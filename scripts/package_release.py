@@ -3,7 +3,6 @@
 import argparse
 import hashlib
 import json
-import os
 from pathlib import Path
 import plistlib
 import shutil
@@ -121,7 +120,8 @@ def main():
                 output.add(package, arcname=name)
         else:
             archive = args.output / f"{name}.zip"
-            with zipfile.ZipFile(archive, "w", compression=zipfile.ZIP_DEFLATED) as output:
+            with zipfile.ZipFile(archive, "w", compression=zipfile.ZIP_DEFLATED,
+                                 strict_timestamps=False) as output:
                 for path in sorted(package.rglob("*")):
                     if path.is_file():
                         # Keep VTX.app at the root so Finder can open or drag it directly.
