@@ -17,7 +17,7 @@ VTX uses Metal on Mac, Vulkan on Linux, and Vulkan with a Direct3D 12 fallback o
 
 For automated visual analysis, use `vtx --inspect MODEL --output DIR`. See [inspection exports](INSPECTION.md) for detail framing, sections, and pixel queries, and [measurements](MEASUREMENTS.md) for unit resolution and geometric measurements.
 
-For optional DXF/DWG 2D drawing previews, see [drawing support](DRAWINGS.md). The Python bridge is embedded in the binary; ezdxf/Pillow and the separate LibreDWG converter are installed independently.
+For DXF/DWG 2D drawing previews, see [drawing support](DRAWINGS.md) and [load-time profiling](CAD_PERFORMANCE.md). The Python bridge is embedded in the binary; ezdxf/Pillow and the separate LibreDWG converter are installed independently.
 
 ## Release packages
 

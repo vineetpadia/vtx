@@ -108,7 +108,7 @@ pub struct Scene {
     pub bounds: [[f32; 3]; 2],
     pub units: super::units::Units,
     pub source_info: serde_json::Value,
-    pub part_metadata: Vec<serde_json::Value>,
+    pub part_metadata: Vec<super::drawing::EntityMetadata>,
     pub triangles: usize,
     pub line_segments: usize,
     pub points: usize,
@@ -125,6 +125,7 @@ struct Style<'a> {
     texture_uv: Option<&'a [[f32; 2]]>,
     encoded_texture: bool,
     colors: Option<&'a [[u8; 4]]>,
+    entity_ids: Option<&'a [u32]>,
     color: Option<[u8; 4]>,
     linear_color: Option<[f32; 4]>,
     instances: &'a [(three_mf::Instance, bool)],
@@ -187,7 +188,12 @@ impl Uploader {
         }
         uniform[8..].copy_from_slice(&transform);
         let mut uniform = uniform.to_vec();
-        uniform.extend_from_slice(&[part_id as f32, 0.0, 0.0, 0.0]);
+        uniform.extend_from_slice(&[
+            part_id as f32,
+            u8::from(style.entity_ids.is_some()) as f32,
+            style.entity_ids.map_or(0, |ids| ids.len()) as f32,
+            0.0,
+        ]);
         let uniform = self.buffer(bytemuck::cast_slice(&uniform), wgpu::BufferUsages::UNIFORM)?;
         Ok(self.device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("VTX part material"),
@@ -563,7 +569,17 @@ impl Builder<'_> {
                 if rgba.len() != points.len() {
                     return Err("Invalid vertex colors".into());
                 }
-                gpu.buffer(bytemuck::cast_slice(rgba), wgpu::BufferUsages::STORAGE)
+                if let Some(ids) = style.entity_ids {
+                    if ids.len() != rgba.len() {
+                        return Err("Invalid drawing entity IDs".into());
+                    }
+                    let mut bytes = Vec::with_capacity(rgba.len() * 8);
+                    bytes.extend_from_slice(bytemuck::cast_slice(rgba));
+                    bytes.extend_from_slice(bytemuck::cast_slice(ids));
+                    gpu.buffer(&bytes, wgpu::BufferUsages::STORAGE)
+                } else {
+                    gpu.buffer(bytemuck::cast_slice(rgba), wgpu::BufferUsages::STORAGE)
+                }
             })
             .transpose()?;
         let coordinates = style
@@ -1092,22 +1108,49 @@ pub fn load(path: &Path, uploader: &UploadTarget) -> Result<Scene> {
                 .map_or(0, Vec::len);
             builder.scene.notice = Some("2D modelspace projection");
             builder.scene.source_info = drawing.source_info;
-            for part in drawing.parts {
-                let cloud = part.kind == "points";
-                let lines = part.kind == "lines";
-                if lines && part.positions.len() % 2 != 0 {
-                    return Err("Invalid drawing line vertices".into());
+            // Preserve entity order (coplanar painter order), batch adjacent primitive kinds,
+            // and carry per-vertex entity IDs so queries retain original handles/layers.
+            let mut iter = drawing.parts.into_iter().peekable();
+            while let Some(first) = iter.next() {
+                let kind = first.kind;
+                let mut batch_vertices = first.positions.len();
+                let mut positions = Vec::new();
+                let mut colors = Vec::new();
+                let mut ids = Vec::new();
+                for part in std::iter::once(first).chain(std::iter::from_fn(|| {
+                    if iter.peek().is_some_and(|p| {
+                        p.kind == kind
+                            && batch_vertices.saturating_add(p.positions.len()) <= 1_000_000
+                    }) {
+                        let part = iter.next();
+                        batch_vertices += part.as_ref().unwrap().positions.len();
+                        part
+                    } else {
+                        None
+                    }
+                })) {
+                    let id = u32::try_from(builder.scene.part_metadata.len() + 1)?;
+                    let vertices = part.positions.len();
+                    if kind == super::drawing::Primitive::Lines && vertices % 2 != 0 {
+                        return Err("Invalid drawing line vertices".into());
+                    }
+                    colors.resize(colors.len() + vertices, part.color);
+                    ids.resize(ids.len() + vertices, id);
+                    positions.extend(part.positions);
+                    builder.scene.part_metadata.push(part.metadata);
                 }
-                if part.positions.is_empty() {
+                if positions.is_empty() {
                     continue;
                 }
-                // Line-list upload uses the point path to avoid interpreting vertices as triangles.
+                let cloud = kind == super::drawing::Primitive::Points;
+                let lines = kind == super::drawing::Primitive::Lines;
                 builder.add(
-                    &part.positions,
+                    &positions,
                     &[],
                     cloud || lines,
                     Style {
-                        color: Some(part.color),
+                        colors: Some(&colors),
+                        entity_ids: Some(&ids),
                         ..Default::default()
                     },
                 )?;
@@ -1115,11 +1158,13 @@ pub fn load(path: &Path, uploader: &UploadTarget) -> Result<Scene> {
                 uploaded.lines = lines;
                 if lines {
                     uploaded.points = false;
-                    builder.scene.points -= part.positions.len();
-                    builder.scene.line_segments += part.positions.len() / 2;
+                    builder.scene.points -= positions.len();
+                    builder.scene.line_segments += positions.len() / 2;
                 }
-                builder.scene.part_metadata.push(part.metadata);
             }
+            builder.scene.source_info["gpu_batches"] = serde_json::json!(builder.scene.parts.len());
+            builder.scene.source_info["entities"] =
+                serde_json::json!(builder.scene.part_metadata.len());
         }
         "stl" => builder.add(&read_stl(&fs::read(path)?)?, &[], false, Style::default())?,
         _ => return Err("Unsupported desktop model format".into()),

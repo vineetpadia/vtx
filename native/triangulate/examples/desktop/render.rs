@@ -624,6 +624,15 @@ pub fn check(path: &Path, screenshot: Option<&Path>) -> Result<()> {
         ms(initialized + completed), scene.gpu_wait_ms,
         scene.triangles, scene.points, visible, scene.issues);
     eprintln!("GPU: {}", info.name);
+    if scene.source_info["kind"] == "drawing_2d" {
+        eprintln!(
+            "CAD: reader={} load_ms={:.3} gpu_batches={} entities={}",
+            scene.source_info["reader"].as_str().unwrap_or("unknown"),
+            scene.source_info["load_ms"].as_f64().unwrap_or(0.0),
+            scene.parts.len(),
+            scene.part_metadata.len()
+        );
+    }
     Ok(())
 }
 

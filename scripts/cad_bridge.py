@@ -4,6 +4,9 @@
 Dependencies: ezdxf==1.4.3, Pillow>=10,<13. DWG additionally uses dwg2dxf.
 Geometry is explicitly projected onto world XY; this is not a 3D-solid reader.
 """
+from array import array
+import struct
+import time
 import contextlib
 import json
 import os
@@ -25,6 +28,7 @@ def load_drawing(filename):
     except ImportError as exc:
         raise RuntimeError("CAD dependencies missing. Run scripts/install_cad_support.py or set VTX_CAD_PYTHON to a Python with ezdxf==1.4.3 and Pillow installed.") from exc
 
+    imported=time.perf_counter()
     warnings = []
     parts = {}
 
@@ -111,6 +115,7 @@ def load_drawing(filename):
         except (ValueError, TypeError):
             meters_per_unit = None
         return {"parts": output, "source_info": {"kind": "drawing_2d", "projection": "modelspace projected onto XY; Z set to zero",
+            "bridge_parse_draw_ms": (time.perf_counter()-imported)*1000,
             "format": source.suffix.lower()[1:], "dxf_version": document.dxfversion,
             "insunits": int(document.header.get("$INSUNITS", 0)), "meters_per_unit": meters_per_unit, "units_label": ezdxf.units.unit_name(document.units),
             "conversion": conversion, "warnings": warnings,
@@ -121,7 +126,21 @@ if __name__ == "__main__":
     try:
         with contextlib.redirect_stdout(sys.stderr):
             drawing = load_drawing(sys.argv[1])
-        print(json.dumps(drawing, allow_nan=False, separators=(",", ":")))
+        if os.environ.get("VTX_CAD_BINARY") == "1":
+            payloads=[]
+            for part in drawing["parts"]:
+                points=part.pop("positions")
+                part["vertex_count"]=len(points)
+                floats=array("f",(coordinate for point in points for coordinate in point))
+                if sys.byteorder != "little": floats.byteswap()
+                payloads.append(floats)
+            metadata=json.dumps(drawing,allow_nan=False,separators=(",", ":")).encode("utf-8")
+            stream=sys.stdout.buffer
+            stream.write(struct.pack("<8sQ",b"VTXCAD01",len(metadata)))
+            stream.write(metadata)
+            for payload in payloads: stream.write(payload.tobytes())
+        else:
+            print(json.dumps(drawing, allow_nan=False, separators=(",", ":")))
     except Exception as exc:
         print(f"VTX CAD import: {exc}", file=sys.stderr)
         sys.exit(1)

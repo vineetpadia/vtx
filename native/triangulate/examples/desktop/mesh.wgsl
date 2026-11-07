@@ -26,6 +26,7 @@ struct VertexOut {
     @location(2) uv: vec2<f32>,
     @location(3) world: vec3<f32>,
     @location(4) @interpolate(flat) instance: u32,
+    @location(5) @interpolate(flat) part_id: u32,
 }
 
 fn linear(srgb: vec3<f32>) -> vec3<f32> {
@@ -50,6 +51,7 @@ fn project(world: vec3<f32>) -> VertexOut {
     out.eye = p;
     out.world = world;
     out.instance = 0u;
+    out.part_id = u32(material.metadata.x);
     return out;
 }
 
@@ -72,6 +74,7 @@ fn base_material_color() -> vec4<f32> {
     let world = vec3(dot(transform_x, local), dot(transform_y, local), dot(transform_z, local));
     var out = project(world);
     out.instance = instance;
+    if material.metadata.y > 0.5 {out.part_id = colors[u32(material.metadata.z) + i];}
     out.color = base_material_color();
     if material.flags.y > 0.5 {
         let rgba = unpack4x8unorm(colors[i]);
@@ -137,14 +140,14 @@ struct QueryOut {
     if material.flags.z > 0.5 { alpha *= textureSample(base_color, base_sampler, input.uv).a; }
     if alpha < material.flags.w {discard;}
     var out: QueryOut;
-    out.position_part = vec4(input.world, material.metadata.x);
+    out.position_part = vec4(input.world, f32(input.part_id));
     out.normal_instance = vec4(-normalize(cross(dpdx(input.world), dpdy(input.world))), f32(input.instance) + 1.0);
     return out;
 }
 @fragment fn query_point(input: VertexOut) -> QueryOut {
     clip_section(input.world);
     var out: QueryOut;
-    out.position_part = vec4(input.world, material.metadata.x);
+    out.position_part = vec4(input.world, f32(input.part_id));
     out.normal_instance = vec4(0.0, 0.0, 0.0, f32(input.instance) + 1.0);
     return out;
 }

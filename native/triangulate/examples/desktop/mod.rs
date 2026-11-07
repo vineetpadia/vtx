@@ -1,4 +1,5 @@
 mod drawing;
+mod dxf_fast;
 mod inspect;
 mod measure;
 mod model;

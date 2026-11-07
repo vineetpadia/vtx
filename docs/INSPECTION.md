@@ -52,7 +52,7 @@ The manifest's `queries` array follows command-line query order and records a st
 - `hit: false` for background, through-holes, and geometry removed by the section plane.
 - `hit: true` with imported-world `position`, a camera-facing geometric `normal`, one-based `part_id`, and zero-based GPU `instance_index`. Drawing hits also include entity/layer metadata where available.
 
-The GPU query pass shares transforms, depth testing, clipping, and material alpha-cutoff tests with the image pass. Normals are null for lines and points. Normals describe the rendered mesh, not exact CAD surface derivatives. A part ID identifies an import draw group; it is not a CAD face/feature identifier and is not guaranteed stable across model edits or importer changes. GPU instance ordering may differ from source file node ordering. Position precision is the same float32 precision used for display geometry.
+The GPU query pass shares transforms, depth testing, clipping, and material alpha-cutoff tests with the image pass. Normals are null for lines and points. Normals describe the rendered mesh, not exact CAD surface derivatives. For 3D models, a part ID identifies an import draw group; drawings retain entity-group IDs even when GPU draws are batched. It is not a CAD face/feature identifier and is not guaranteed stable across model edits or importer changes. GPU instance ordering may differ from source file node ordering. Position precision is the same float32 precision used for display geometry.
 
 ## Measurements
 

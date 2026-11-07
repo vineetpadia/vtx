@@ -19,7 +19,7 @@ Preview builds are unsigned; your OS may ask for approval on first launch. [Inst
 
 Drop a model into the window, or press **Ctrl+O** (**⌘O** on Mac). Drag to orbit, scroll to zoom, **R** to reset.
 
-**Formats:** STL, OBJ, PLY, glTF/GLB, FBX, STEP, 3MF, IFC, and SolidWorks saved display meshes. DXF/DWG 2D drawing previews and IGES are available through optional extensions. See [drawing setup and limitations](docs/DRAWINGS.md). Keep model textures and companion files together.
+**Formats:** STL, OBJ, PLY, glTF/GLB, FBX, STEP, 3MF, IFC, and SolidWorks saved display meshes. Common ASCII DXF linework is built in. Full DXF/DWG previews and IGES are available through optional extensions. See [drawing setup and limitations](docs/DRAWINGS.md). Keep model textures and companion files together.
 
 ## Inspect with an LLM
 
@@ -34,6 +34,8 @@ Use `--region` for detail views, `--section` for section cuts, and repeated `--q
 Use `--distance`, `--angle`, and `--diameter` to measure selected 3D query points; `--measure-unit` converts reported lengths. [Measurement guide](docs/MEASUREMENTS.md).
 
 Units are detected for STEP, glTF, 3MF, and drawing headers with explicit provenance. Other formats remain in model units; `--unit mm` is a user override, not a geometry conversion. See [agent inspection workflow](docs/INSPECTION.md) for conventions, options, and limitations. Build from source to use this feature.
+
+For DXF/DWG, see [drawing load benchmarks and profiling](docs/CAD_PERFORMANCE.md). Common ASCII linework uses a native path; complex content falls back to the full drawing frontend.
 
 ## Performance
 

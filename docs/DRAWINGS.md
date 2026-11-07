@@ -1,10 +1,10 @@
 # DXF and DWG drawings
 
-The native VTX desktop app and `--inspect` support **2D modelspace drawing previews**. DXF uses [ezdxf's drawing frontend](https://ezdxf.readthedocs.io/en/stable/addons/drawing.html). DWG is converted locally to DXF by the separate [GNU LibreDWG `dwg2dxf` executable](https://www.gnu.org/software/libredwg/). No drawings are uploaded to a service.
+The native VTX desktop app and `--inspect` support **2D modelspace drawing previews**. Common ASCII DXF linework uses a native reader; unsupported content falls back to [ezdxf's drawing frontend](https://ezdxf.readthedocs.io/en/stable/addons/drawing.html). DWG is converted locally to DXF by the separate [GNU LibreDWG `dwg2dxf` executable](https://www.gnu.org/software/libredwg/). No drawings are uploaded to a service.
 
 ## Install optional dependencies
 
-Python 3.10+ is required for the drawing bridge. From the repository:
+The native linework path needs no Python. Python 3.10+ is required for the full drawing fallback. From the repository:
 
 ```sh
 python3 scripts/install_cad_support.py
@@ -26,6 +26,8 @@ vtx drawing.dwg
 vtx --inspect drawing.dxf --output drawing-inspection
 vtx --inspect drawing.dwg --output dwg-inspection --views plan --size 1024
 ```
+
+See [performance measurements and profiling](CAD_PERFORMANCE.md) for the native path, batching, and reproducible benchmarks.
 
 The file picker accepts both extensions. Drawings open in an orthographic plan view; R restores that view. Inspection defaults to `plan.png`, looking from +Z onto XY. Other standard views can be explicitly selected, but side views of a 2D projection are usually edge-on. Region framing and pixel queries work with drawings; a line hit returns an entity handle/layer when available and a null surface normal.
 
