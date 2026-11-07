@@ -1,5 +1,6 @@
 //! Reproducible, headless visual evidence for humans and multimodal agents.
 use super::{
+    measure::{self, Request},
     model::{self, UploadTarget},
     render::{self, Camera, Renderer},
     Result,
@@ -8,7 +9,7 @@ use image::{Rgba, RgbaImage};
 use serde_json::json;
 use std::{ffi::OsString, fs, path::PathBuf};
 
-pub const USAGE: &str = "vtx --inspect MODEL --output DIR [--views front,back,left,right,top,bottom,iso,plan] [--size 768] [--unit model|mm|cm|m|in|ft] [--region xmin,ymin,zmin,xmax,ymax,zmax] [--section nx,ny,nz,offset] [--query view,x,y]";
+pub const USAGE: &str = "vtx --inspect MODEL --output DIR [--views front,back,left,right,top,bottom,iso,plan] [--size 768] [--unit model|mm|cm|m|in|ft] [--region xmin,ymin,zmin,xmax,ymax,zmax] [--section nx,ny,nz,offset] [--query view,x,y] [--distance query0,query1] [--angle query0,vertex,query2] [--diameter query0,query1,query2,...] [--measure-unit mm|cm|m|in|ft]";
 const VIEWS: &[&str] = &["front", "back", "left", "right", "top", "bottom", "iso"];
 const FOOTER: u32 = 132;
 const INK: Rgba<u8> = Rgba([225, 235, 245, 255]);
@@ -23,6 +24,8 @@ struct Options {
     region: Option<[f32; 6]>,
     section: Option<[f32; 4]>,
     queries: Vec<(String, [u32; 2])>,
+    measurements: Vec<Request>,
+    measure_unit: Option<String>,
 }
 impl Options {
     fn parse(args: Vec<OsString>) -> Result<Self> {
@@ -38,6 +41,8 @@ impl Options {
             region: None,
             section: None,
             queries: Vec::new(),
+            measurements: Vec::new(),
+            measure_unit: None,
         };
         while let Some(key) = args.next() {
             let value = args.next().ok_or(USAGE)?;
@@ -47,6 +52,12 @@ impl Options {
                 "--unit" => options.unit = value.to_str().ok_or(USAGE)?.into(),
                 "--region" => options.region = Some(numbers(value.to_str().ok_or(USAGE)?)?),
                 "--section" => options.section = Some(numbers(value.to_str().ok_or(USAGE)?)?),
+                "--distance" | "--angle" | "--diameter" => options.measurements.push(
+                    Request::parse(key.to_str().unwrap(), value.to_str().ok_or(USAGE)?)?,
+                ),
+                "--measure-unit" => {
+                    options.measure_unit = Some(value.to_str().ok_or(USAGE)?.into())
+                }
                 "--query" => {
                     let fields: Vec<_> = value.to_str().ok_or(USAGE)?.split(',').collect();
                     if fields.len() != 3 {
@@ -136,6 +147,26 @@ impl Options {
         if options.queries.len() > 1024 {
             return Err("At most 1024 queries per inspection".into());
         }
+        if options.measurements.len() > 128 {
+            return Err("At most 128 measurements per inspection".into());
+        }
+        if options
+            .measurements
+            .iter()
+            .any(|m| m.indices().iter().any(|&i| i >= options.queries.len()))
+        {
+            return Err(
+                "Measurement indices refer to zero-based --query options; index is out of range"
+                    .into(),
+            );
+        }
+        if options
+            .measure_unit
+            .as_deref()
+            .is_some_and(|s| super::units::length_factor(s).is_none())
+        {
+            return Err("Measurement unit must be mm, cm, m, in, or ft".into());
+        }
         Ok(options)
     }
 }
@@ -213,6 +244,8 @@ pub fn run(args: Vec<OsString>) -> Result<()> {
         &options.model,
         &UploadTarget::ready(renderer.uploader.clone()),
     )?;
+    let units = scene.units.overridden(&options.unit);
+    measure::validate_unit(&units, options.measure_unit.as_deref())?;
     fs::create_dir_all(&options.output)?;
     let target = options.region.map(|r| {
         let center = [0, 1, 2].map(|i| r[i] * 0.5 + r[i + 3] * 0.5);
@@ -225,17 +258,7 @@ pub fn run(args: Vec<OsString>) -> Result<()> {
     let frame_diameter = target.map_or(scene.diameter, |(_, d)| d);
     let spans = [0, 1, 2].map(|i| f64::from(scene.bounds[1][i]) - f64::from(scene.bounds[0][i]));
     let size = options.size;
-    let unit = if options.unit == "model" {
-        if scene.source_info["insunits"].as_u64().unwrap_or(0) != 0 {
-            scene.source_info["units_label"]
-                .as_str()
-                .unwrap_or("model units")
-        } else {
-            "model units"
-        }
-    } else {
-        &options.unit
-    };
+    let unit = units.label.as_str();
     // Matches mesh.wgsl orthographic projection exactly, at a shared zoom in all views.
     let pixels_per_unit = f64::from(size) * 0.5 * 1.85 * 0.9 * 0.9 / f64::from(frame_diameter);
     let bar_length = nice_length(f64::from(size) * 0.24 / pixels_per_unit);
@@ -249,13 +272,22 @@ pub fn run(args: Vec<OsString>) -> Result<()> {
         let mut camera = camera(name);
         camera.target = target;
         camera.section = options.section.map(|[x, y, z, offset]| [x, y, z, -offset]);
-        let coordinates: Vec<_> = options
+        let selected_queries: Vec<_> = options
             .queries
             .iter()
-            .filter(|(view, _)| view == name)
-            .map(|(_, p)| *p)
+            .enumerate()
+            .filter(|(_, (view, _))| view == name)
+            .map(|(index, (_, p))| (index, *p))
             .collect();
-        for mut hit in render::query_pixels(&renderer, &scene, &camera, size, &coordinates)? {
+        let coordinates: Vec<_> = selected_queries.iter().map(|(_, p)| *p).collect();
+        for (query, mut hit) in selected_queries.iter().zip(render::query_pixels(
+            &renderer,
+            &scene,
+            &camera,
+            size,
+            &coordinates,
+        )?) {
+            hit["query_index"] = json!(query.0);
             hit["view"] = json!(name);
             query_results.push(hit);
         }
@@ -263,6 +295,37 @@ pub fn run(args: Vec<OsString>) -> Result<()> {
         let rendered = render::snapshot(&renderer, &scene, &camera, size, size)?;
         let mut image = RgbaImage::from_pixel(size, size + FOOTER, BG);
         image::imageops::replace(&mut image, &rendered, 0, 0);
+        if !options.measurements.is_empty() {
+            for &(query_index, [x, y]) in &selected_queries {
+                if options
+                    .measurements
+                    .iter()
+                    .any(|m| m.indices().contains(&query_index))
+                {
+                    let color = Rgba([255, 180, 70, 255]);
+                    colored_line(
+                        &mut image,
+                        x as i32 - 4,
+                        y as i32,
+                        x as i32 + 4,
+                        y as i32,
+                        color,
+                    );
+                    colored_line(
+                        &mut image,
+                        x as i32,
+                        y as i32 - 4,
+                        x as i32,
+                        y as i32 + 4,
+                        color,
+                    );
+                    let label_x = (x + 7).min(size.saturating_sub(64));
+                    let label_y = y.saturating_sub(18);
+                    text(&mut image, label_x, label_y, &format!("Q{}", query_index));
+                }
+            }
+        }
+
         text(
             &mut image,
             16,
@@ -338,18 +401,26 @@ pub fn run(args: Vec<OsString>) -> Result<()> {
         views.push(json!({"name": name, "image": filename, "projection": "orthographic", "screen_right": axes[0], "screen_up": axes[1], "toward_camera": axes[2], "pixels_per_model_unit": pixels_per_unit, "scale_bar": {"length_model_units": bar_length, "pixels": bar_pixels}, "model_viewport": [0,0,size,size], "image_center_px": [size as f64/2.0,size as f64/2.0], "target_center":target.map_or(scene.center, |(c,_)| c)}));
     }
     sheet.save(options.output.join("contact-sheet.png"))?;
+    query_results.sort_by_key(|q| q["query_index"].as_u64().unwrap());
+    let measurements = measure::evaluate(
+        &options.measurements,
+        &query_results,
+        &units,
+        options.measure_unit.as_deref(),
+    );
     let report = json!({
-        "schema_version": 2, "source": fs::canonicalize(&options.model)?.to_string_lossy(),
+        "schema_version": 3, "source": fs::canonicalize(&options.model)?.to_string_lossy(),
         "detail_region":options.region,
         "section":options.section.map(|plane| json!({"plane_normal_offset":plane,"keep":"dot(normal, position) <= offset", "caps":false, "note":"Clipped surfaces are open. Orange marks intersections; no solid cap or new surface is generated."})),
         "queries":query_results,
         "source_info":scene.source_info,
         "coordinate_convention": "Y up. Front looks from +Z; right from +X; top from +Y. Source coordinates are preserved; view names do not infer semantic front.",
-        "units": {"label": unit, "source": if options.unit != "model" {"user_override"} else if unit != "model units" {"drawing_header"} else {"unspecified"}, "note": "No conversion is applied. Drawing header units are used when present; explicit unit overrides must match imported coordinates."},
+        "units": units,
+        "measurements":measurements,
         "bounds": {"min": scene.bounds[0], "max": scene.bounds[1], "size_xyz": spans, "center": scene.center},
         "parts": scene.part_metadata,
         "geometry": {"line_segments":scene.line_segments, "triangles": scene.triangles, "points": scene.points, "import_issues": scene.issues, "notice": scene.notice},
-        "limitations": ["Images show visible surfaces only; hidden and internal geometry cannot be established from these views.", "Bounds describe imported display geometry, not exact CAD dimensions. Import issues may indicate missing geometry.", "Physical units are only read for DXF/DWG drawing headers; other formats require an explicit known-unit override."],
+        "limitations": ["Images show visible surfaces only; hidden and internal geometry cannot be established from these views.", "Bounds describe imported display geometry, not exact CAD dimensions. Import issues may indicate missing geometry.", "Units may be unknown or ambiguous. Measurements use visible tessellated geometry, not exact CAD topology; circle fits do not identify features automatically."],
         "gpu": adapter.get_info().name, "contact_sheet": "contact-sheet.png", "views": views
     });
     fs::write(
@@ -674,7 +745,7 @@ mod gpu_tests {
             zip.start_file("_rels/.rels", options)?;
             zip.write_all(r#"<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Target="/3D/model.model" Id="rel0" Type="http://schemas.microsoft.com/3dmanufacturing/2013/01/3dmodel"/></Relationships>"#.as_bytes())?;
             zip.start_file("3D/model.model", options)?;
-            zip.write_all(r#"<model unit="millimeter" xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02"><resources><object id="1" type="model"><mesh><vertices><vertex x="-1" y="-1" z="0"/><vertex x="1" y="-1" z="0"/><vertex x="0" y="1" z="0"/></vertices><triangles><triangle v1="0" v2="1" v3="2"/></triangles></mesh></object></resources><build><item objectid="1" transform="1 0 0 0 1 0 0 0 1 -3 0 0"/><item objectid="1" transform="1 0 0 0 1 0 0 0 1 3 0 0"/></build></model>"#.as_bytes())?;
+            zip.write_all(r#"<model unit="inch" xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02"><resources><object id="1" type="model"><mesh><vertices><vertex x="-1" y="-1" z="0"/><vertex x="1" y="-1" z="0"/><vertex x="0" y="1" z="0"/></vertices><triangles><triangle v1="0" v2="1" v3="2"/></triangles></mesh></object></resources><build><item objectid="1" transform="1 0 0 0 1 0 0 0 1 -3 0 0"/><item objectid="1" transform="1 0 0 0 1 0 0 0 1 3 0 0"/></build></model>"#.as_bytes())?;
             zip.finish()?;
         }
         let gpu_instances =
@@ -688,10 +759,42 @@ mod gpu_tests {
         )?;
         assert_eq!(hits[0]["hit"], true);
         assert_eq!(hits[1]["hit"], true);
+        assert_eq!(gpu_instances.units.label, "mm");
+        assert_eq!(gpu_instances.units.source, "importer_normalization");
+        assert!((gpu_instances.bounds[1][0] - gpu_instances.bounds[0][0] - 203.2).abs() < 0.001);
         assert_eq!(hits[0]["part_id"], hits[1]["part_id"]);
         assert_ne!(hits[0]["instance_index"], hits[1]["instance_index"]);
-        assert!(hits[0]["position"][0].as_f64().unwrap() < -2.9);
-        assert!(hits[1]["position"][0].as_f64().unwrap() > 2.9);
+        assert!((hits[0]["position"][0].as_f64().unwrap() + 2.9976995 * 25.4).abs() < 0.01);
+        assert!((hits[1]["position"][0].as_f64().unwrap() - 2.9976995 * 25.4).abs() < 0.01);
+        let measured = root.join("measured");
+        let args = vec![
+            source.as_os_str().to_owned(),
+            "--output".into(),
+            measured.as_os_str().to_owned(),
+            "--views".into(),
+            "front,back".into(),
+            "--size".into(),
+            "257".into(),
+            "--query".into(),
+            "back,128,128".into(),
+            "--query".into(),
+            "front,128,128".into(),
+            "--distance".into(),
+            "0,1".into(),
+            "--unit".into(),
+            "mm".into(),
+            "--measure-unit".into(),
+            "cm".into(),
+        ];
+        run(args)?;
+        let report: serde_json::Value =
+            serde_json::from_slice(&fs::read(measured.join("manifest.json"))?)?;
+        assert_eq!(report["queries"][0]["view"], "back");
+        assert_eq!(report["queries"][1]["view"], "front");
+        assert_eq!(report["units"]["source"], "user_override");
+        assert_eq!(report["measurements"][0]["status"], "ok");
+        assert!((report["measurements"][0]["value"].as_f64().unwrap() - 1.0).abs() < 1e-5);
+        assert_eq!(report["measurements"][0]["unit"], "cm");
         fs::remove_dir_all(root)?;
         Ok(())
     }

@@ -15,7 +15,7 @@ Windows executable: `native\target\release\examples\vtx.exe`.
 
 VTX uses Metal on Mac, Vulkan on Linux, and Vulkan with a Direct3D 12 fallback on Windows. `WGPU_BACKEND=dx12` selects Direct3D 12 on Windows. For GPU checks and diagnostic timings, use `vtx --check MODEL [SCREENSHOT.png]`.
 
-For automated visual analysis, use `vtx --inspect MODEL --output DIR`. See [inspection exports](INSPECTION.md) for detail framing, sections, and pixel queries.
+For automated visual analysis, use `vtx --inspect MODEL --output DIR`. See [inspection exports](INSPECTION.md) for detail framing, sections, and pixel queries, and [measurements](MEASUREMENTS.md) for unit resolution and geometric measurements.
 
 For optional DXF/DWG 2D drawing previews, see [drawing support](DRAWINGS.md). The Python bridge is embedded in the binary; ezdxf/Pillow and the separate LibreDWG converter are installed independently.
 

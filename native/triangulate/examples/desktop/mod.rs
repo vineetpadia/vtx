@@ -1,7 +1,9 @@
 mod drawing;
 mod inspect;
+mod measure;
 mod model;
 mod render;
+mod units;
 
 use std::{
     error::Error,

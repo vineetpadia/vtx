@@ -31,7 +31,9 @@ vtx --inspect model.step --output model-inspection
 
 Use `--region` for detail views, `--section` for section cuts, and repeated `--query view,x,y` options for visible surface positions, normals, and part IDs. DXF/DWG default to a plan view.
 
-Units default to model units (drawing headers are used when available); use `--unit mm` only when imported coordinates are known to be millimeters. See [agent inspection workflow](docs/INSPECTION.md) for conventions, options, and limitations. Build from source to use this feature.
+Use `--distance`, `--angle`, and `--diameter` to measure selected 3D query points; `--measure-unit` converts reported lengths. [Measurement guide](docs/MEASUREMENTS.md).
+
+Units are detected for STEP, glTF, 3MF, and drawing headers with explicit provenance. Other formats remain in model units; `--unit mm` is a user override, not a geometry conversion. See [agent inspection workflow](docs/INSPECTION.md) for conventions, options, and limitations. Build from source to use this feature.
 
 ## Performance
 

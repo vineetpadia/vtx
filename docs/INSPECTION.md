@@ -47,19 +47,23 @@ vtx --inspect part.step --output queried --views front,iso \
 
 Coordinates are zero-based integer pixels in an individual view PNG: X increases rightward and Y downward. Queries sample pixel centers. Annotation footers and contact-sheet coordinates are not valid query inputs. The named view must be exported by the same command, and X/Y must lie inside its square viewport.
 
-The manifest's `queries` array returns:
+The manifest's `queries` array follows command-line query order and records a stable zero-based `query_index`. It returns:
 
 - `hit: false` for background, through-holes, and geometry removed by the section plane.
 - `hit: true` with imported-world `position`, a camera-facing geometric `normal`, one-based `part_id`, and zero-based GPU `instance_index`. Drawing hits also include entity/layer metadata where available.
 
 The GPU query pass shares transforms, depth testing, clipping, and material alpha-cutoff tests with the image pass. Normals are null for lines and points. Normals describe the rendered mesh, not exact CAD surface derivatives. A part ID identifies an import draw group; it is not a CAD face/feature identifier and is not guaranteed stable across model edits or importer changes. GPU instance ordering may differ from source file node ordering. Position precision is the same float32 precision used for display geometry.
 
+## Measurements
+
+Use `--distance i,j`, `--angle i,j,k` (middle point is vertex), and `--diameter i,j,k,...` with zero-based `--query` indices. Results use resolved 3D surface coordinates. `--measure-unit mm|cm|m|in|ft` converts measurement output when physical units are known. See [units and measurement details](MEASUREMENTS.md) for provenance, examples, fit validation, and accuracy limits.
+
 ## Outputs and tool integration
 
 - Seven standard views for 3D input: `front`, `back`, `left`, `right`, `top`, `bottom`, `iso`. Drawings default to one `plan` view; `--views` overrides the selection. Plan looks from +Z onto XY with +Y up.
 - Each PNG has an orthographic projection, view label, scale bar, projected XYZ triad, complete-model XYZ bounding extents, and import issue count. Detail and cut views are marked in their labels.
 - `contact-sheet.png` assembles the selected images into up to three columns. Unused cells are blank.
-- `manifest.json` (schema version 2) records geometry bounds/counts, framing, camera bases, units/provenance, sections, queries, and importer diagnostics. `model_viewport` excludes the footer. `image_center_px`, `target_center`, and `pixels_per_model_unit` describe the image-plane mapping.
+- `manifest.json` (schema version 3) records geometry bounds/counts, framing, camera bases, units/provenance, sections, queries, and importer diagnostics. `model_viewport` excludes the footer. `image_center_px`, `target_center`, and `pixels_per_model_unit` describe the image-plane mapping.
 
 Standard output is one JSON object identical to `manifest.json`; diagnostics go to standard error. Give the LLM that JSON and the contact sheet. It can request individual images, choose a region, cut away an occluder, and query pixels in a subsequent invocation. Each invocation reimports the model; there is no persistent server or separate agent protocol.
 
@@ -69,6 +73,6 @@ Standard output is one JSON object identical to `manifest.json`; diagnostics go 
 
 Framing uses the full-model or detail-region diagonal to fit every orientation. Very slender objects can occupy little of a view. Orthographic scale bars measure lengths in the image plane; angled 3D edges are foreshortened, including in isometric images. The triad omits axes pointing directly toward or away from the camera.
 
-Units default to **model units**, except DXF/DWG with nonzero `$INSUNITS`, which uses the drawing header label. STEP and other model units are not yet inferred. `--unit mm|cm|m|in|ft` overrides the label only; it never rescales coordinates. Use an override only when it matches the imported values. Bounds and queries describe tessellated/display geometry, not exact CAD dimensions. Drawing unit codes and source provenance are retained in `source_info`.
+STEP context units, glTF meters, 3MF importer-normalized millimeters, and DXF/DWG header units are detected with explicit provenance. Unverified formats remain in **model units**. Conflicting STEP contexts disable physical conversion. `--unit mm|cm|m|in|ft` overrides the coordinate label only, retaining detected metadata and recording conflicts. It never rescales the geometry. `--measure-unit` converts measurement values, independently of coordinate labels and framing. See [unit rules](MEASUREMENTS.md).
 
 Check import warnings and drawing limitations before reasoning about completeness. Images alone do not establish hidden/internal geometry. Section views help expose interiors but do not reconstruct geometry missing from the importer.

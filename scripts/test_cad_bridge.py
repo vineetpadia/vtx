@@ -39,6 +39,7 @@ class DrawingTests(unittest.TestCase):
         for binary in (False, True):
             result = load_drawing(self.fixture(binary))
             self.assertEqual(result["source_info"]["insunits"], 4)
+            self.assertAlmostEqual(result["source_info"]["meters_per_unit"],0.001)
             self.assertEqual(result["source_info"]["warnings"], [])
             lines = [p for p in result["parts"] if p["metadata"]["entity_type"] == "LINE"]
             self.assertEqual(len(lines), 1)

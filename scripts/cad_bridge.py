@@ -106,9 +106,13 @@ def load_drawing(filename):
         output = [p for p in parts.values() if p["positions"]]
         if not output:
             raise RuntimeError("Drawing contains no supported visible modelspace geometry (paperspace-only drawings are not imported)")
+        try:
+            meters_per_unit = ezdxf.units.conversion_factor(document.units, ezdxf.units.M) if document.units else None
+        except (ValueError, TypeError):
+            meters_per_unit = None
         return {"parts": output, "source_info": {"kind": "drawing_2d", "projection": "modelspace projected onto XY; Z set to zero",
             "format": source.suffix.lower()[1:], "dxf_version": document.dxfversion,
-            "insunits": int(document.header.get("$INSUNITS", 0)), "units_label": ezdxf.units.unit_name(document.units),
+            "insunits": int(document.header.get("$INSUNITS", 0)), "meters_per_unit": meters_per_unit, "units_label": ezdxf.units.unit_name(document.units),
             "conversion": conversion, "warnings": warnings,
             "limitations": ["2D modelspace only; paperspace layouts are not imported", "ACIS/3DSOLID bodies and raster underlays are not reconstructed", "Lines render at one pixel; font substitutions and curve tessellation may affect appearance"]}}
 

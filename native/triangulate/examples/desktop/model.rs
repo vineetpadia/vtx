@@ -106,6 +106,7 @@ pub struct Scene {
     pub center: [f32; 3],
     pub diameter: f32,
     pub bounds: [[f32; 3]; 2],
+    pub units: super::units::Units,
     pub source_info: serde_json::Value,
     pub part_metadata: Vec<serde_json::Value>,
     pub triangles: usize,
@@ -700,6 +701,9 @@ pub fn load(path: &Path, uploader: &UploadTarget) -> Result<Scene> {
             center: [0.0; 3],
             diameter: 0.0,
             bounds: [[0.0; 3]; 2],
+            units: super::units::Units::unknown(
+                "No verified unit metadata is available for this importer.",
+            ),
             source_info: serde_json::Value::Null,
             part_metadata: Vec::new(),
             triangles: 0,
@@ -1041,6 +1045,7 @@ pub fn load(path: &Path, uploader: &UploadTarget) -> Result<Scene> {
         "stp" | "step" | "p21" => {
             let bytes = fs::read(path)?;
             let flat = StepFile::strip_flatten(&bytes);
+            builder.scene.units = super::units::step_units(&flat);
             let step = StepFile::parse(&flat);
             let (mesh, stats) = triangulate::triangulate::triangulate(&step);
             let points: Vec<Point> = mesh
@@ -1118,6 +1123,45 @@ pub fn load(path: &Path, uploader: &UploadTarget) -> Result<Scene> {
         }
         "stl" => builder.add(&read_stl(&fs::read(path)?)?, &[], false, Style::default())?,
         _ => return Err("Unsupported desktop model format".into()),
+    }
+    let extension = path
+        .extension()
+        .and_then(|s| s.to_str())
+        .unwrap_or("")
+        .to_ascii_lowercase();
+    match extension.as_str() {
+        "3mf" => {
+            builder.scene.units = super::units::Units::known(
+                "mm",
+                0.001,
+                "importer_normalization",
+                serde_json::json!({"importer":"three_mf","output_unit":"mm","note":"Source model units and placements are normalized to millimeters by the 3MF importer."}),
+            )
+        }
+        "gltf" | "glb" | "gltfpack" => {
+            builder.scene.units = super::units::Units::known(
+                "m",
+                1.0,
+                "format_standard",
+                serde_json::json!({"format":"glTF 2.0","specification":"https://registry.khronos.org/glTF/specs/2.0/glTF-2.0.html#coordinate-system-and-units","note":"Node transforms are already applied to imported coordinates."}),
+            )
+        }
+        "dxf" | "dwg" => {
+            if let Some(scale) = builder.scene.source_info["meters_per_unit"]
+                .as_f64()
+                .filter(|f| f.is_finite() && *f > 0.0)
+            {
+                builder.scene.units = super::units::Units::known(
+                    builder.scene.source_info["units_label"]
+                        .as_str()
+                        .unwrap_or("drawing units"),
+                    scale,
+                    "drawing_header",
+                    serde_json::json!({"insunits":builder.scene.source_info["insunits"],"coordinates_rescaled":false}),
+                );
+            }
+        }
+        _ => (),
     }
     if builder.scene.parts.is_empty() {
         return Err("The model contains no drawable geometry".into());
