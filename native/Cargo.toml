@@ -1,0 +1,6 @@
+[workspace]
+resolver = "2"
+members = ["step", "triangulate", "nurbs", "cdt", "meshopt_decode"]
+
+[profile.release]
+codegen-units = 1

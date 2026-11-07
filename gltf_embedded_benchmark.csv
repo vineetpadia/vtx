@@ -1,0 +1,109 @@
+model,engine,run,read_to_geometry_ms,wall_ms,read_ms,document_ms,buffers_ms,geometry_ms
+grid-embedded.gltf,prior VTX,1,50.797,59.1054999968037,13.19,12.81,14.22,7.13
+grid-embedded.gltf,SIMD + map,1,44.53,52.55089999991469,0.1,23.06,7.14,7.08
+grid-embedded.gltf,borrowed + serial,1,40.769,49.92219999257941,0.1,19.56,8.08,7.02
+grid-embedded.gltf,VTX,1,33.776,42.57640001014806,0.11,18.35,2.5,6.84
+grid-embedded.gltf,FastGLTF,1,56.1904,67.55610000982415,nan,nan,nan,nan
+grid-embedded.gltf,SIMD + map,2,45.369,52.12259999825619,0.1,23.73,7.1,6.91
+grid-embedded.gltf,borrowed + serial,2,38.641,45.11250001087319,0.11,18.64,7.01,6.94
+grid-embedded.gltf,VTX,2,37.943,45.17899999336805,0.15,18.74,3.53,7.02
+grid-embedded.gltf,FastGLTF,2,55.9905,65.32250001328066,nan,nan,nan,nan
+grid-embedded.gltf,prior VTX,2,50.869,58.00499999895692,13.09,13.02,14.37,6.91
+grid-embedded.gltf,borrowed + serial,3,38.836,45.06540000147652,0.1,18.52,7.17,6.81
+grid-embedded.gltf,VTX,3,35.369,43.56920000282116,0.11,19.33,2.73,7.2
+grid-embedded.gltf,FastGLTF,3,56.0232,65.8772000024328,nan,nan,nan,nan
+grid-embedded.gltf,prior VTX,3,50.643,57.342600004631095,13.04,12.31,14.71,7.05
+grid-embedded.gltf,SIMD + map,3,44.614,50.97110000497196,0.1,22.79,7.22,6.95
+grid-embedded.gltf,VTX,4,34.13,42.33589999785181,0.1,18.43,2.4,6.86
+grid-embedded.gltf,FastGLTF,4,55.6735,65.59230000129901,nan,nan,nan,nan
+grid-embedded.gltf,prior VTX,4,51.035,57.58449999848381,13.23,13.1,14.24,6.96
+grid-embedded.gltf,SIMD + map,4,44.73,52.12990001018625,0.1,22.95,7.27,6.99
+grid-embedded.gltf,borrowed + serial,4,39.346,46.14269999729004,0.1,18.67,7.27,7.15
+grid-embedded.gltf,FastGLTF,5,56.1052,66.49650000326801,nan,nan,nan,nan
+grid-embedded.gltf,prior VTX,5,51.066,57.5061999988975,13.15,13.48,14.13,6.9
+grid-embedded.gltf,SIMD + map,5,44.798,51.56209999404382,0.12,23.68,7.07,6.84
+grid-embedded.gltf,borrowed + serial,5,38.304,45.207499992102385,0.1,18.39,7.12,6.81
+grid-embedded.gltf,VTX,5,34.329,42.2812999895541,0.11,18.34,2.5,7.29
+grid-embedded.gltf,prior VTX,6,50.492,57.09630000637844,12.67,13.03,14.27,6.8
+grid-embedded.gltf,SIMD + map,6,44.063,50.568799997563474,0.1,23.05,6.97,6.79
+grid-embedded.gltf,borrowed + serial,6,38.471,45.11649999767542,0.11,18.49,7.04,6.81
+grid-embedded.gltf,VTX,6,33.733,41.352500003995374,0.1,18.23,2.42,6.62
+grid-embedded.gltf,FastGLTF,6,56.2755,66.39350000477862,nan,nan,nan,nan
+grid-embedded.gltf,SIMD + map,7,45.067,51.32499999308493,0.1,23.68,7.07,6.93
+grid-embedded.gltf,borrowed + serial,7,40.445,47.23780001222622,0.11,20.34,7.05,6.78
+grid-embedded.gltf,VTX,7,34.153,42.496000009123236,0.1,18.17,2.52,7.24
+grid-embedded.gltf,FastGLTF,7,55.6674,66.30479999876115,nan,nan,nan,nan
+grid-embedded.gltf,prior VTX,7,50.413,57.0671999885235,12.73,13.07,14.15,6.96
+grid-embedded.gltf,borrowed + serial,8,37.983,44.36419998819474,0.1,18.21,7.08,6.73
+grid-embedded.gltf,VTX,8,33.733,40.67090000899043,0.1,18.41,2.57,6.68
+grid-embedded.gltf,FastGLTF,8,55.5947,65.52960000408348,nan,nan,nan,nan
+grid-embedded.gltf,prior VTX,8,50.291,56.78559999796562,12.93,12.9,14.24,6.79
+grid-embedded.gltf,SIMD + map,8,44.585,51.382600009674206,0.1,23.12,7.18,6.96
+grid-embedded.gltf,VTX,9,38.525,45.642500001122244,0.12,18.76,6.39,7.02
+grid-embedded.gltf,FastGLTF,9,55.7178,66.29369998699985,nan,nan,nan,nan
+grid-embedded.gltf,prior VTX,9,51.777,59.82969999604393,13.3,12.86,14.57,7.58
+grid-embedded.gltf,SIMD + map,9,45.0,51.08760000439361,0.09,23.75,7.18,6.77
+grid-embedded.gltf,borrowed + serial,9,39.63,46.43729999952484,0.09,18.94,7.11,7.08
+grid-embedded.gltf,FastGLTF,10,56.2829,66.42899999860674,nan,nan,nan,nan
+grid-embedded.gltf,prior VTX,10,52.534,58.887900013360195,13.25,13.09,14.11,6.7
+grid-embedded.gltf,SIMD + map,10,44.896,51.45359999733046,0.11,23.44,7.09,6.69
+grid-embedded.gltf,borrowed + serial,10,41.519,47.97250000410713,0.1,19.19,8.64,7.5
+grid-embedded.gltf,VTX,10,34.01,41.546599997673184,0.1,18.3,2.41,7.0
+grid-embedded.gltf,prior VTX,11,51.896,60.0982999894768,13.52,13.11,14.1,6.8
+grid-embedded.gltf,SIMD + map,11,44.269,53.80700000387151,0.11,23.12,7.14,6.66
+grid-embedded.gltf,borrowed + serial,11,38.628,46.84720000659581,0.11,18.56,6.99,7.04
+grid-embedded.gltf,VTX,11,33.046,39.60440000810195,0.09,18.02,2.29,6.7
+grid-embedded.gltf,FastGLTF,11,55.942,67.84519999928307,nan,nan,nan,nan
+grid-embedded.gltf,SIMD + map,12,44.823,53.70119999861345,0.09,23.54,7.05,6.83
+grid-embedded.gltf,borrowed + serial,12,38.555,46.75130000396166,0.11,18.46,6.92,6.94
+grid-embedded.gltf,VTX,12,34.004,43.447200005175546,0.1,18.15,2.73,6.84
+grid-embedded.gltf,FastGLTF,12,55.6604,68.53159998718183,nan,nan,nan,nan
+grid-embedded.gltf,prior VTX,12,50.07,58.86170000303537,12.85,12.44,14.45,6.83
+grid.glb,prior VTX,1,17.609,29.59220000775531,9.43,0.07,0.0,7.06
+grid.glb,VTX,1,17.454,25.852200007648207,9.37,0.08,0.0,6.97
+grid.glb,VTX,2,17.694,25.852800012216903,9.71,0.08,0.0,6.91
+grid.glb,prior VTX,2,17.686,27.555900000152178,9.48,0.07,0.0,7.11
+grid.glb,prior VTX,3,17.414,24.108500001602806,9.41,0.07,0.0,6.95
+grid.glb,VTX,3,17.494,24.44919999106787,9.22,0.09,0.0,7.13
+grid.glb,VTX,4,17.686,27.657600003294647,9.59,0.08,0.0,6.73
+grid.glb,prior VTX,4,17.48,24.20640000491403,9.57,0.08,0.0,6.84
+grid.glb,prior VTX,5,17.877,24.65479999955278,9.69,0.07,0.0,7.08
+grid.glb,VTX,5,17.775,26.94090000295546,9.58,0.08,0.0,7.08
+grid.glb,VTX,6,18.035,26.944700002786703,9.81,0.1,0.0,7.1
+grid.glb,prior VTX,6,18.191,25.73409999604337,9.75,0.08,0.0,7.32
+grid.glb,prior VTX,7,17.948,26.863800012506545,9.84,0.07,0.0,7.01
+grid.glb,VTX,7,17.045,25.686199995107017,9.32,0.07,0.0,6.66
+grid.glb,VTX,8,17.026,23.227499987115152,9.24,0.07,0.0,6.74
+grid.glb,prior VTX,8,17.857,28.277100005652755,9.62,0.09,0.0,7.13
+grid.glb,prior VTX,9,17.249,23.43250000558328,9.28,0.07,0.0,6.92
+grid.glb,VTX,9,17.498,24.556300006224774,9.46,0.07,0.0,6.95
+grid.glb,VTX,10,17.595,30.16010001010727,9.45,0.07,0.0,7.04
+grid.glb,prior VTX,10,17.286,27.18740000273101,9.52,0.07,0.0,6.7
+grid.glb,prior VTX,11,17.566,29.12760000617709,9.65,0.07,0.0,6.82
+grid.glb,VTX,11,17.791,24.181700006010942,9.45,0.08,0.0,7.17
+grid.glb,VTX,12,17.174,26.92669999669306,9.29,0.07,0.0,6.79
+grid.glb,prior VTX,12,17.505,26.15920000243932,9.33,0.07,0.0,7.03
+grid-external.gltfpack,prior VTX,1,29.984,38.23910000210162,9.93,0.11,0.0,18.92
+grid-external.gltfpack,VTX,1,18.808,27.346599992597476,9.52,0.1,0.01,8.14
+grid-external.gltfpack,VTX,2,18.802,27.454700000816956,9.54,0.09,0.0,8.09
+grid-external.gltfpack,prior VTX,2,29.745,38.87449999456294,9.87,0.09,0.0,18.79
+grid-external.gltfpack,prior VTX,3,29.682,36.59699999843724,9.38,0.09,0.0,19.11
+grid-external.gltfpack,VTX,3,19.499,28.799800013075583,9.94,0.1,0.0,8.43
+grid-external.gltfpack,VTX,4,19.158,28.1362999958219,9.88,0.1,0.01,8.13
+grid-external.gltfpack,prior VTX,4,30.307,38.570000004256144,10.27,0.11,0.0,18.94
+grid-external.gltfpack,prior VTX,5,30.502,36.758799993549474,9.96,0.1,0.0,19.44
+grid-external.gltfpack,VTX,5,18.83,25.631299999076873,9.58,0.11,0.01,8.1
+grid-external.gltfpack,VTX,6,19.09,25.896699997247197,9.77,0.09,0.0,8.17
+grid-external.gltfpack,prior VTX,6,29.203,35.46249998908024,9.28,0.09,0.0,18.81
+grid-external.gltfpack,prior VTX,7,29.429,36.34999999485444,9.49,0.09,0.0,18.85
+grid-external.gltfpack,VTX,7,19.039,25.862600014079362,9.92,0.1,0.01,8.01
+grid-external.gltfpack,VTX,8,19.164,29.531799998949282,9.91,0.09,0.01,8.11
+grid-external.gltfpack,prior VTX,8,30.481,39.00350000185426,9.9,0.1,0.0,19.49
+grid-external.gltfpack,prior VTX,9,29.869,40.06739999749698,9.96,0.1,0.0,18.79
+grid-external.gltfpack,VTX,9,18.89,25.88429999013897,9.81,0.09,0.0,7.99
+grid-external.gltfpack,VTX,10,19.038,26.060500007588416,9.85,0.09,0.0,8.07
+grid-external.gltfpack,prior VTX,10,29.487,37.49609999067616,9.66,0.09,0.0,18.71
+grid-external.gltfpack,prior VTX,11,29.637,37.817100004758686,9.68,0.09,0.0,18.82
+grid-external.gltfpack,VTX,11,18.906,27.20209999824874,9.86,0.09,0.01,7.92
+grid-external.gltfpack,VTX,12,19.045,25.478800002019852,9.9,0.1,0.0,8.02
+grid-external.gltfpack,prior VTX,12,29.82,39.79029999754857,9.68,0.11,0.01,18.98

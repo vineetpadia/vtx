@@ -1,0 +1,53 @@
+[package]
+name = "triangulate"
+version = "0.1.0"
+authors = ["Matt Keeter <matt.j.keeter@gmail.com>"]
+edition = "2018"
+
+[dependencies]
+cdt = { path = "../cdt" }
+nurbs = { path = "../nurbs" }
+step = { path = "../step" }
+
+log = "0.4.14"
+nalgebra-glm = "0.13.0"
+rayon = { version = "1.5", optional = true }
+thiserror = "1.0"
+crc32fast = { version = "1.5", optional = true }
+ifc-lite-processing = { version = "=28.2.0", optional = true }
+image = { version = "0.25", default-features = false, features = ["jpeg", "png"], optional = true }
+libdeflater = { version = "1.26", optional = true }
+libloading = { version = "0.8", optional = true }
+pollster = { version = "0.4", optional = true }
+quick-xml = { version = "0.41", optional = true }
+rfd = { version = "0.17", optional = true }
+wgpu = { version = "26.0.1", default-features = false, features = ["std", "dx12", "metal", "vulkan", "wgsl"], optional = true }
+winit = { version = "0.30", default-features = false, features = ["rwh_06", "x11", "wayland", "wayland-dlopen"], optional = true }
+zip = { version = "9.4", default-features = false, features = ["deflate-flate2-zlib-rs"], optional = true }
+
+[features]
+parallel = ["rayon", "step/parallel"]
+desktop = ["dep:crc32fast", "dep:ifc-lite-processing", "dep:image", "dep:libdeflater", "dep:libloading", "dep:pollster", "dep:quick-xml", "dep:rfd", "dep:wgpu", "dep:winit", "dep:zip"]
+
+[[example]]
+name = "vtx"
+required-features = ["desktop"]
+
+[dev-dependencies]
+clap = "2.33"
+env_logger = "0.8"
+earcutr = "0.4"
+fast-float = "0.2"
+memchr = "2"
+base64-simd = "0.8"
+gltf = { version = "1.4", default-features = false, features = ["utils", "extensions", "KHR_texture_transform"] }
+draco-core = { version = "2.3.3", default-features = false, features = ["decoder", "edgebreaker_valence_decode", "legacy_bitstream_decode"] }
+vtx-meshopt-decode = { path = "../meshopt_decode" }
+ufbx = "0.11.5"
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["raw_value"] }
+percent-encoding = "2"
+bytemuck = "1"
+
+[target.'cfg(windows)'.dev-dependencies]
+memmap2 = "0.9"

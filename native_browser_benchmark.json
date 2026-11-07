@@ -1,0 +1,114 @@
+[
+  {
+    "run": 1,
+    "engine": "Foxtrot",
+    "firstMeshMs": 630.1999999880791,
+    "fullMeshMs": 758.5999999940395,
+    "status": "First-time import. Browser elapsed 672 ms. Meshing errors reported: 14.",
+    "triangles": "327,175"
+  },
+  {
+    "run": 1,
+    "engine": "STEPFlash",
+    "firstMeshMs": 529.1000000089407,
+    "fullMeshMs": 609.1000000089407,
+    "status": "First-time import. Browser elapsed 574 ms. Meshing errors reported: 14.",
+    "triangles": "327,175"
+  },
+  {
+    "run": 2,
+    "engine": "STEPFlash",
+    "firstMeshMs": 535.1000000089407,
+    "fullMeshMs": 582.7000000029802,
+    "status": "First-time import. Browser elapsed 578 ms. Meshing errors reported: 14.",
+    "triangles": "327,175"
+  },
+  {
+    "run": 2,
+    "engine": "Foxtrot",
+    "firstMeshMs": 675.6000000089407,
+    "fullMeshMs": 775.7999999970198,
+    "status": "First-time import. Browser elapsed 719 ms. Meshing errors reported: 14.",
+    "triangles": "327,175"
+  },
+  {
+    "run": 3,
+    "engine": "Foxtrot",
+    "firstMeshMs": 694.2000000029802,
+    "fullMeshMs": 748,
+    "status": "First-time import. Browser elapsed 745 ms. Meshing errors reported: 14.",
+    "triangles": "327,175"
+  },
+  {
+    "run": 3,
+    "engine": "STEPFlash",
+    "firstMeshMs": 614.9000000059605,
+    "fullMeshMs": 656.6000000089407,
+    "status": "First-time import. Browser elapsed 653 ms. Meshing errors reported: 14.",
+    "triangles": "327,175"
+  },
+  {
+    "run": 4,
+    "engine": "STEPFlash",
+    "firstMeshMs": 619.1000000089407,
+    "fullMeshMs": 728.1000000089407,
+    "status": "First-time import. Browser elapsed 675 ms. Meshing errors reported: 14.",
+    "triangles": "327,175"
+  },
+  {
+    "run": 4,
+    "engine": "Foxtrot",
+    "firstMeshMs": 658.9000000059605,
+    "fullMeshMs": 1074,
+    "status": "First-time import. Browser elapsed 819 ms. Meshing errors reported: 14.",
+    "triangles": "327,175"
+  },
+  {
+    "run": 5,
+    "engine": "Foxtrot",
+    "firstMeshMs": 680.2999999970198,
+    "fullMeshMs": 737.2999999970198,
+    "status": "First-time import. Browser elapsed 717 ms. Meshing errors reported: 14.",
+    "triangles": "327,175"
+  },
+  {
+    "run": 5,
+    "engine": "STEPFlash",
+    "firstMeshMs": 645.2000000029802,
+    "fullMeshMs": 801,
+    "status": "First-time import. Browser elapsed 724 ms. Meshing errors reported: 14.",
+    "triangles": "327,175"
+  },
+  {
+    "run": 6,
+    "engine": "STEPFlash",
+    "firstMeshMs": 627.5,
+    "fullMeshMs": 695.5,
+    "status": "First-time import. Browser elapsed 662 ms. Meshing errors reported: 14.",
+    "triangles": "327,175"
+  },
+  {
+    "run": 6,
+    "engine": "Foxtrot",
+    "firstMeshMs": 692.4000000059605,
+    "fullMeshMs": 820.2999999970198,
+    "status": "First-time import. Browser elapsed 750 ms. Meshing errors reported: 14.",
+    "triangles": "327,175"
+  },
+  {
+    "run": 7,
+    "engine": "Foxtrot",
+    "firstMeshMs": 681.2999999970198,
+    "fullMeshMs": 735.5999999940395,
+    "status": "First-time import. Browser elapsed 723 ms. Meshing errors reported: 14.",
+    "triangles": "327,175"
+  },
+  {
+    "run": 7,
+    "engine": "STEPFlash",
+    "firstMeshMs": 626,
+    "fullMeshMs": 705.7000000029802,
+    "status": "First-time import. Browser elapsed 655 ms. Meshing errors reported: 14.",
+    "triangles": "327,175"
+  }
+]

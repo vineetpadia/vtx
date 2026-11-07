@@ -1,0 +1,481 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>VTX | 3D viewer</title><style>
+:root{color-scheme:dark;font-family:system-ui,-apple-system,Segoe UI,sans-serif}*{box-sizing:border-box}body{margin:0;background:#0b1220;color:#e7eefb}.top{height:72px;background:#101c30;border-bottom:1px solid #25354e;display:flex;align-items:center;gap:24px;padding:12px 22px}.brand{font-weight:800;font-size:19px;letter-spacing:.3px}.brand span{color:#57c6e8}.dim{color:#9badc8;font-size:12px}.pill{font-size:11px;border:1px solid #41546e;color:#9badc8;padding:4px 7px;border-radius:15px}.workspace{display:grid;grid-template-columns:305px 1fr;height:calc(100vh - 72px)}aside{padding:20px;border-right:1px solid #25354e;background:#10192a;overflow:auto}main{position:relative;min-width:0}canvas{width:100%;height:100%;display:block;cursor:grab}canvas:active{cursor:grabbing}.input{padding:20px 15px;border:1px dashed #537092;border-radius:12px;text-align:center;cursor:pointer;background:#17253b;margin-bottom:15px}.input:hover{border-color:#64d1f7}input[type=file]{display:none}.button{width:100%;border:0;background:#49b7de;color:#071827;padding:10px 14px;border-radius:8px;font-weight:700;cursor:pointer;margin-top:8px}.button:disabled{background:#4a6174;color:#a6b6c5;cursor:not-allowed}h3{font-size:12px;text-transform:uppercase;letter-spacing:1.1px;color:#94a8c7;margin:28px 0 12px}.stat{border-bottom:1px solid #25354e;display:flex;justify-content:space-between;gap:12px;padding:9px 0;font-size:13px}.stat span:last-child{font-variant-numeric:tabular-nums;color:#69d6ff}label{display:block;font-size:12px;color:#b6c4dd;margin-bottom:8px}select{width:100%;background:#1b2b42;border:1px solid #405472;color:#e3edfb;padding:10px;border-radius:8px}.hint{position:absolute;bottom:18px;left:18px;color:#9bb1cf;font-size:12px;background:#111e30bb;padding:9px 12px;border-radius:7px}.overlay{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);pointer-events:none;text-align:center;color:#9badc8}.status{font-size:12px;line-height:1.5;color:#9badc8;margin-top:18px;overflow-wrap:anywhere}.footer{font-size:11px;color:#788da9;line-height:1.5;margin-top:25px}
+</style></head><body><header class="top"><div class="brand">VT<span>X</span></div><div class="dim">Local 3D viewer</div><div class="pill">PROTOTYPE</div></header><div class="workspace"><aside><button class="button" id="disk" hidden style="margin:0 0 12px">Open from disk</button><label class="input" for="file"><div style="font-size:30px;margin-bottom:6px">⬡</div><strong>Select a 3D file</strong><div class="dim" style="margin-top:8px">STEP · IGES · STL · 3MF · OBJ · PLY · glTF · FBX · IFC · SolidWorks</div></label><input type="file" id="file" multiple accept=".step,.stp,.p21,.igs,.iges,.stl,.3mf,.obj,.ply,.gltf,.glb,.bin,.png,.jpg,.jpeg,.fbx,.ifc,.sldprt,.sldasm"><div id="filename" class="dim">No file selected</div><h3>Meshing</h3><label for="quality">Linear deflection (mm in typical mm models)</label><select id="quality"><option value="1">Fast preview (1.0)</option><option value="0.25" selected>Balanced (0.25)</option><option value="0.05">Fine (0.05)</option></select><button class="button" id="go">Open model</button><button class="button" id="sample" style="background:#253c56;color:#ddedfc">Load sample STEP</button><h3>Performance</h3><div class="stat"><span>Read / parse</span><span id="read">—</span></div><div class="stat"><span>Transfer B-rep</span><span id="transfer">—</span></div><div class="stat"><span>First part queued for frame</span><span id="first">—</span></div><div class="stat"><span>Full geometry</span><span id="total">—</span></div><div class="stat"><span id="parts-label">Parts displayed</span><span id="parts">0</span></div><div class="stat"><span id="primitive-label">Triangles</span><span id="tri">0</span></div><div id="status" class="status">Select a file to begin.</div><div class="footer">Open CASCADE can cache completed meshes. Native mode imports the file on every load.</div></aside><main><canvas id="view"></canvas><div class="overlay" id="overlay">Select a 3D file or load the sample.</div><div class="hint">Drag to rotate · Scroll to zoom · Double-click to reset</div></main></div>
+<script type="module">
+import { readStl } from "./stl.mjs";
+import { MeshFrameReader, words } from "./mesh_reader.mjs";
+import { TextureBank } from "./texture_bank.mjs";
+const nativeMode=document.body.dataset.engine==='native';
+if(nativeMode){
+ document.getElementById('quality').disabled=true;
+ document.querySelector('label[for="quality"]').textContent='Native engine uses fixed tessellation settings';
+ document.getElementById('parts-label').textContent='Mesh chunks';
+}
+const canvas=document.getElementById('view'),gl=canvas.getContext('webgl2',{antialias:true});
+if(!gl){document.getElementById('status').textContent='This prototype requires WebGL2.';throw Error('WebGL2 unavailable')}
+const vs=`#version 300 es
+precision highp float;in vec3 aPosition;in vec2 aUv;in vec4 aVertexColor;in vec4 aWorldX;in vec4 aWorldY;in vec4 aWorldZ;uniform bool uInstanced;out vec2 vUv;out vec3 vVertexColor;uniform vec3 uCenter;uniform float uScale;uniform float uYaw;uniform float uPitch;uniform float uAspect;out vec3 vEye;
+void main(){
+ vec4 q=vec4(aPosition,1.0);
+ vec3 world=uInstanced?vec3(dot(aWorldX,q),dot(aWorldY,q),dot(aWorldZ,q)):aPosition;
+ vec3 p=(world-uCenter)*uScale;
+ float cy=cos(uYaw),sy=sin(uYaw),cx=cos(uPitch),sx=sin(uPitch);
+ p=vec3(cy*p.x+sy*p.z,p.y,-sy*p.x+cy*p.z);
+ p=vec3(p.x,cx*p.y-sx*p.z,sx*p.y+cx*p.z);
+ vEye=p;
+ vUv=aUv;
+ vVertexColor=aVertexColor.rgb;
+ gl_PointSize=2.0;
+ const float nearPlane=0.05;
+ const float farPlane=100.0;
+ float distance=4.0-p.z;
+ float depth=((farPlane+nearPlane)*distance-2.0*farPlane*nearPlane)/(farPlane-nearPlane);
+ gl_Position=vec4(p.x*1.85/uAspect,p.y*1.85,depth*0.25,distance*0.25);
+}`;
+const fs=`#version 300 es
+precision highp float;
+in vec3 vEye;
+in vec2 vUv;
+in vec3 vVertexColor;
+out vec4 color;
+uniform vec4 uBase;
+uniform bool uAuthored;
+uniform bool uTextured;
+uniform bool uPoints;
+uniform bool uVertexColors;
+uniform float uCutoff;
+uniform sampler2D uTexture;
+vec3 srgb(vec3 linear){
+ return mix(12.92*linear,1.055*pow(max(linear,vec3(0.0)),vec3(1.0/2.4))-0.055,step(vec3(0.0031308),linear));
+}
+void main(){
+ vec4 base=uVertexColors?vec4(vVertexColor,1.0):uBase;
+ if(uPoints){color=base;return;}
+ vec3 n=normalize(cross(dFdx(vEye),dFdy(vEye)));
+ float light=.38+.62*abs(dot(n,normalize(vec3(.4,.8,1.0))));
+ if(uTextured)base*=texture(uTexture,vUv);
+ if(base.a<uCutoff)discard;
+ color=vec4(uAuthored?srgb(base.rgb*light):base.rgb*light,1.0);
+}`;
+function shader(t,s){const o=gl.createShader(t);gl.shaderSource(o,s);gl.compileShader(o);if(!gl.getShaderParameter(o,gl.COMPILE_STATUS))throw Error(gl.getShaderInfoLog(o));return o}
+const prog=gl.createProgram();gl.attachShader(prog,shader(gl.VERTEX_SHADER,vs));gl.attachShader(prog,shader(gl.FRAGMENT_SHADER,fs));gl.linkProgram(prog);gl.useProgram(prog);const attribute=gl.getAttribLocation(prog,'aPosition');const uvAttribute=gl.getAttribLocation(prog,'aUv');const worldAttributes=['aWorldX','aWorldY','aWorldZ'].map(name=>gl.getAttribLocation(prog,name));const uni={};for(let n of ['uInstanced','uCenter','uScale','uYaw','uPitch','uAspect','uBase','uAuthored','uTextured','uCutoff','uTexture'])uni[n]=gl.getUniformLocation(prog,n);
+const vertexColorAttribute=gl.getAttribLocation(prog,'aVertexColor');
+uni.uPoints=gl.getUniformLocation(prog,'uPoints');
+uni.uVertexColors=gl.getUniformLocation(prog,'uVertexColors');
+const objects=[];let textures=new TextureBank(gl,scheduleDraw);let mins=[Infinity,Infinity,Infinity],maxs=[-Infinity,-Infinity,-Infinity],yaw=-.6,pitch=.4,zoom=1,drag=false,prevX=0,prevY=0,triangles=0,points=0,loaded=0;
+function reset(beforeTextureUpload=null){textures.dispose();textures=new TextureBank(gl,scheduleDraw,beforeTextureUpload);scheduleDraw();objects.forEach(o=>{gl.deleteBuffer(o.buffer);if(o.index)gl.deleteBuffer(o.index);if(o.uv)gl.deleteBuffer(o.uv);if(o.colors)gl.deleteBuffer(o.colors);for(const batch of o.instances||[])gl.deleteBuffer(batch.buffer)});objects.length=0;mins=[Infinity,Infinity,Infinity];maxs=[-Infinity,-Infinity,-Infinity];triangles=0;points=0;loaded=0;yaw=-.6;pitch=.4;zoom=1;['read','transfer','first','total'].forEach(k=>document.getElementById(k).textContent='—');document.getElementById('parts').textContent='0';document.getElementById('tri').textContent='0';document.getElementById('primitive-label').textContent='Triangles';document.getElementById('overlay').style.display='block'}
+function expandBounds(vertices){
+ let [minX,minY,minZ]=mins;
+ let [maxX,maxY,maxZ]=maxs;
+ for(let i=0;i<vertices.length;i+=3){
+  const x=vertices[i],y=vertices[i+1],z=vertices[i+2];
+  minX=Math.min(minX,x);minY=Math.min(minY,y);minZ=Math.min(minZ,z);
+  maxX=Math.max(maxX,x);maxY=Math.max(maxY,y);maxZ=Math.max(maxZ,z);
+ }
+ mins=[minX,minY,minZ];
+ maxs=[maxX,maxY,maxZ];
+}
+function validBounds(minimum,maximum){
+ return Array.isArray(minimum)&&Array.isArray(maximum)&&minimum.length===3&&maximum.length===3&&
+   minimum.every((value,axis)=>Number.isFinite(value)&&Number.isFinite(maximum[axis])&&value<=maximum[axis]);
+}
+function mergeBounds(minimum,maximum){
+ for(let axis=0;axis<3;axis++){
+  mins[axis]=Math.min(mins[axis],minimum[axis]);
+  maxs[axis]=Math.max(maxs[axis],maximum[axis]);
+ }
+}
+let progressDirty=false;
+function meshProgress(){
+ progressDirty=true;
+ scheduleDraw();
+}
+function updateMeshProgress(){
+ if(!progressDirty)return;
+ progressDirty=false;
+ document.getElementById('overlay').style.display=triangles||points?'none':'block';
+ document.getElementById('primitive-label').textContent=points?'Points':'Triangles';
+ document.getElementById('tri').textContent=(points||triangles).toLocaleString();
+ document.getElementById('parts').textContent=String(loaded);
+}
+function addMesh(vertices){
+ if(!vertices.length)return;
+ expandBounds(vertices);
+ const buffer=gl.createBuffer();
+ gl.bindBuffer(gl.ARRAY_BUFFER,buffer);
+ gl.bufferData(gl.ARRAY_BUFFER,vertices,gl.STATIC_DRAW);
+ objects.push({buffer,count:vertices.length/3});
+ triangles+=vertices.length/9;
+ loaded++;
+ meshProgress();
+}
+function allocateIndexed({vertices,triangles:faces,color,cutoff,texture,shared,minimum,maximum,mode,vertex_colors,index_width:indexWidth=4}){
+ const pointCloud=mode==='points';
+ if(indexWidth!==2&&indexWidth!==4)throw Error('Invalid index width');
+ if(!Number.isSafeInteger(vertices)||vertices<1||vertices>0x7fffffff/12||
+    !Number.isSafeInteger(faces)||faces<(pointCloud?0:1)||faces>0x7fffffff/(3*indexWidth)||
+    (pointCloud&&(faces!==0||shared||texture!=null)))throw Error('Invalid indexed mesh size');
+ if(shared&&!validBounds(minimum,maximum))throw Error('Invalid instance bounds');
+ const mesh={buffer:gl.createBuffer(),index:pointCloud?null:gl.createBuffer(),positionBytes:vertices*12,
+             indexBytes:faces*3*indexWidth,indexWidth,indexType:indexWidth===2?gl.UNSIGNED_SHORT:gl.UNSIGNED_INT,
+             positionsReceived:0,count:0,uvReceived:0,color,cutoff,texture,
+             instances:shared?[]:null,minimum,maximum,pointCloud,colorsReceived:0};
+ objects.push(mesh);
+ if(!mesh.buffer||(!pointCloud&&!mesh.index))throw Error('Unable to allocate indexed mesh buffers');
+ gl.bindBuffer(gl.ARRAY_BUFFER,mesh.buffer);
+ gl.bufferData(gl.ARRAY_BUFFER,mesh.positionBytes,gl.STATIC_DRAW);
+ if(mesh.index){
+  gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,mesh.index);
+  gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,mesh.indexBytes,gl.STATIC_DRAW);
+ }
+ if(vertex_colors){
+  mesh.colors=gl.createBuffer();
+  if(!mesh.colors)throw Error('Unable to allocate vertex color buffer');
+  mesh.colorBytes=vertices*4;
+  gl.bindBuffer(gl.ARRAY_BUFFER,mesh.colors);
+  gl.bufferData(gl.ARRAY_BUFFER,mesh.colorBytes,gl.STATIC_DRAW);
+ }
+ if(texture!=null){
+  mesh.uv=gl.createBuffer();
+  if(!mesh.uv)throw Error('Unable to allocate texture coordinate buffer');
+  mesh.uvBytes=vertices*8;
+  gl.bindBuffer(gl.ARRAY_BUFFER,mesh.uv);
+  gl.bufferData(gl.ARRAY_BUFFER,mesh.uvBytes,gl.STATIC_DRAW);
+ }
+ loaded++;
+ return mesh;
+}
+function complete(mesh){
+ return !mesh||(mesh.positionBytes===mesh.positionsReceived&&
+   (mesh.pointCloud?mesh.positionBytes===mesh.count*12:mesh.indexBytes===mesh.count*mesh.indexWidth)&&
+   (!mesh.colors||mesh.colorsReceived===mesh.colorBytes)&&(!mesh.uv||mesh.uvReceived===mesh.uvBytes));
+}
+function addPoints(mesh,count){
+ mesh.count+=count;
+ points+=count;
+ meshProgress();
+}
+function addIndexedBatch(mesh,{type:kind,minimum,maximum},bytes){
+ if(!mesh||!bytes)throw Error('Invalid indexed mesh batch');
+ const length=bytes.byteLength;
+ const stride=kind==='indices'?3*mesh.indexWidth:kind==='colors'?4:kind==='uv'?8:12;
+ if(!length||length%stride)throw Error('Invalid indexed mesh batch');
+ if(kind==='positions'){
+  if((!mesh.pointCloud&&mesh.count)||mesh.positionsReceived+length>mesh.positionBytes)throw Error('Unexpected vertex batch');
+  if(!mesh.instances){
+   if(minimum!==undefined||maximum!==undefined){
+    if(!validBounds(minimum,maximum))throw Error('Invalid vertex bounds');
+    mergeBounds(minimum,maximum);
+   }else{
+    expandBounds(words(bytes,Float32Array));
+   }
+  }
+  gl.bindBuffer(gl.ARRAY_BUFFER,mesh.buffer);
+  gl.bufferSubData(gl.ARRAY_BUFFER,mesh.positionsReceived,bytes);
+  mesh.positionsReceived+=length;
+  if(mesh.pointCloud&&!mesh.colors)addPoints(mesh,length/12);
+ }else if(kind==='colors'){
+  const ready=mesh.pointCloud?(mesh.colorsReceived+length)*3<=mesh.positionsReceived:
+    mesh.positionsReceived===mesh.positionBytes&&!mesh.count;
+  if(!mesh.colors||!ready||mesh.colorsReceived+length>mesh.colorBytes)throw Error('Unexpected color batch');
+  gl.bindBuffer(gl.ARRAY_BUFFER,mesh.colors);
+  gl.bufferSubData(gl.ARRAY_BUFFER,mesh.colorsReceived,bytes);
+  mesh.colorsReceived+=length;
+  if(mesh.pointCloud)addPoints(mesh,length/4);
+ }else if(kind==='uv'){
+  if(!mesh.uv||mesh.count||mesh.uvReceived+length>mesh.uvBytes)throw Error('Unexpected UV batch');
+  gl.bindBuffer(gl.ARRAY_BUFFER,mesh.uv);
+  gl.bufferSubData(gl.ARRAY_BUFFER,mesh.uvReceived,bytes);
+  mesh.uvReceived+=length;
+ }else{
+  const offset=mesh.count*mesh.indexWidth;
+  if(!mesh.index||mesh.positionsReceived!==mesh.positionBytes||(mesh.uv&&mesh.uvReceived!==mesh.uvBytes)||
+     (mesh.colors&&mesh.colorsReceived!==mesh.colorBytes)||offset+length>mesh.indexBytes)throw Error('Unexpected index batch');
+  gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,mesh.index);
+  gl.bufferSubData(gl.ELEMENT_ARRAY_BUFFER,offset,bytes);
+  mesh.count+=length/mesh.indexWidth;
+  if(!mesh.instances){triangles+=length/stride;meshProgress()}
+ }
+}
+function addInstances(mesh,{count,mirrored},payload){
+ if(!mesh?.instances||!complete(mesh)||!Number.isSafeInteger(count)||count<1||
+    payload?.byteLength!==count*48)throw Error('Invalid instance batch');
+ const matrices=words(payload,Float32Array);
+ // The extrema of an affine transform over the local bounding box are
+ // obtained by selecting one endpoint per axis for each matrix row.
+ for(let offset=0;offset<matrices.length;offset+=12){
+  for(let axis=0;axis<3;axis++){
+   const row=offset+axis*4;
+   let low=matrices[row+3], high=low;
+   for(let j=0;j<3;j++){
+    const coefficient=matrices[row+j];
+    if(!Number.isFinite(coefficient))throw Error('Invalid instance matrix');
+    low+=coefficient*(coefficient<0?mesh.maximum[j]:mesh.minimum[j]);
+    high+=coefficient*(coefficient<0?mesh.minimum[j]:mesh.maximum[j]);
+   }
+   if(!Number.isFinite(low)||!Number.isFinite(high))throw Error('Invalid transformed bounds');
+   mins[axis]=Math.min(mins[axis],low);
+   maxs[axis]=Math.max(maxs[axis],high);
+  }
+ }
+ const buffer=gl.createBuffer();
+ if(!buffer)throw Error('Unable to allocate instance matrices');
+ mesh.instances.push({buffer,count,mirrored});
+ gl.bindBuffer(gl.ARRAY_BUFFER,buffer);
+ gl.bufferData(gl.ARRAY_BUFFER,matrices,gl.STATIC_DRAW);
+ triangles+=count*mesh.count/3;
+ meshProgress();
+}
+function drawGeometry(mesh){
+ if(mesh.index)gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,mesh.index);
+ if(mesh.instances){
+  gl.uniform1i(uni.uInstanced,1);
+  for(const batch of mesh.instances){
+   gl.bindBuffer(gl.ARRAY_BUFFER,batch.buffer);
+   for(let row=0;row<3;row++){
+    const attribute=worldAttributes[row];
+    gl.enableVertexAttribArray(attribute);
+    gl.vertexAttribPointer(attribute,4,gl.FLOAT,false,48,row*16);
+    gl.vertexAttribDivisor(attribute,1);
+   }
+   gl.frontFace(batch.mirrored?gl.CW:gl.CCW);
+   gl.drawElementsInstanced(gl.TRIANGLES,mesh.count,mesh.indexType,0,batch.count);
+  }
+  gl.frontFace(gl.CCW);
+ }else{
+  gl.uniform1i(uni.uInstanced,0);
+  for(const attribute of worldAttributes)gl.disableVertexAttribArray(attribute);
+  if(mesh.index)gl.drawElements(gl.TRIANGLES,mesh.count,mesh.indexType,0);
+  else gl.drawArrays(mesh.pointCloud?gl.POINTS:gl.TRIANGLES,0,mesh.count);
+ }
+}
+let drawPending=false;
+function scheduleDraw(){
+ if(!drawPending){drawPending=true;requestAnimationFrame(draw)}
+}
+new ResizeObserver(scheduleDraw).observe(canvas);
+function draw(){
+ drawPending=false;
+ updateMeshProgress();
+ const dpr=Math.min(devicePixelRatio||1,2);
+ const width=Math.max(1,Math.round(canvas.clientWidth*dpr));
+ const height=Math.max(1,Math.round(canvas.clientHeight*dpr));
+ if(canvas.width!==width||canvas.height!==height){canvas.width=width;canvas.height=height}
+ gl.viewport(0,0,width,height);
+ gl.clearColor(.038,.065,.112,1);
+ gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);
+ gl.enable(gl.DEPTH_TEST);
+ gl.disable(gl.CULL_FACE);
+ if(!triangles&&!points)return;
+ const center=mins.map((x,i)=>(x+maxs[i])/2);
+ const span=mins.map((x,i)=>maxs[i]-x);
+ const aspect=width/height;
+ // Fit the bounding sphere so the model stays in view as it rotates.
+ const scale=0.9*Math.min(1,aspect)/Math.max(Math.hypot(...span),1e-7);
+ gl.useProgram(prog);
+ gl.uniform3fv(uni.uCenter,center);
+ gl.uniform1f(uni.uScale,zoom*scale);
+ gl.uniform1f(uni.uYaw,yaw);
+ gl.uniform1f(uni.uPitch,pitch);
+ gl.uniform1f(uni.uAspect,aspect);
+ gl.enableVertexAttribArray(attribute);
+ for(const mesh of objects){
+  if(!mesh.count)continue;
+  bindAppearance(mesh);
+  gl.bindBuffer(gl.ARRAY_BUFFER,mesh.buffer);
+  gl.vertexAttribPointer(attribute,3,gl.FLOAT,false,0,0);
+  drawGeometry(mesh);
+ }
+}
+scheduleDraw();
+const defaultColor=new Float32Array([.33,.75,.95,1]);
+function bindAppearance(mesh){
+ const texture=textures.textures.get(mesh.texture);
+ gl.uniform4fv(uni.uBase,mesh.color||defaultColor);
+ gl.uniform1i(uni.uAuthored,!!mesh.color);
+ gl.uniform1f(uni.uCutoff,mesh.cutoff??-1);
+ gl.uniform1i(uni.uTextured,!!texture);
+ gl.uniform1i(uni.uPoints,!!mesh.pointCloud);
+ gl.uniform1i(uni.uVertexColors,!!mesh.colors);
+ if(mesh.colors){
+  gl.bindBuffer(gl.ARRAY_BUFFER,mesh.colors);
+  gl.enableVertexAttribArray(vertexColorAttribute);
+  gl.vertexAttribPointer(vertexColorAttribute,4,gl.UNSIGNED_BYTE,true,0,0);
+ }else{
+  gl.disableVertexAttribArray(vertexColorAttribute);
+ }
+ if(texture){
+  gl.activeTexture(gl.TEXTURE0);
+  gl.bindTexture(gl.TEXTURE_2D,texture);
+  gl.uniform1i(uni.uTexture,0);
+  gl.bindBuffer(gl.ARRAY_BUFFER,mesh.uv);
+  gl.enableVertexAttribArray(uvAttribute);
+  gl.vertexAttribPointer(uvAttribute,2,gl.FLOAT,false,0,0);
+ }else{
+  gl.disableVertexAttribArray(uvAttribute);
+ }
+}
+canvas.addEventListener('pointerdown',e=>{drag=true;prevX=e.clientX;prevY=e.clientY;canvas.setPointerCapture(e.pointerId)});canvas.addEventListener('pointerup',()=>drag=false);canvas.addEventListener('pointermove',e=>{if(drag){yaw+=(e.clientX-prevX)*.008;pitch+=(e.clientY-prevY)*.008;prevX=e.clientX;prevY=e.clientY;scheduleDraw()}});canvas.addEventListener('wheel',e=>{e.preventDefault();zoom=Math.min(12,Math.max(.08,zoom*Math.exp(-e.deltaY*.001)));scheduleDraw()},{passive:false});canvas.addEventListener('dblclick',()=>{yaw=-.6;pitch=.4;zoom=1;scheduleDraw()});
+const input=document.getElementById('file'),status=document.getElementById('status'),go=document.getElementById('go');input.addEventListener('change',()=>document.getElementById('filename').textContent=input.files.length>1?input.files.length+' files selected':input.files[0]?.name||'No file selected');
+const disk=document.getElementById('disk'),sample=document.getElementById('sample');
+disk.hidden=document.body.dataset.desktop!=='enabled';
+function setBusy(busy){go.disabled=disk.disabled=sample.disabled=busy}
+function setQuality(name){
+ const iges=name.endsWith('.igs')||name.endsWith('.iges');
+ document.getElementById('quality').disabled=nativeMode&&!iges;
+ document.querySelector('label[for="quality"]').textContent=nativeMode&&!iges?
+  'Native engine uses fixed tessellation settings':'Linear deflection (mm)';
+}
+input.addEventListener('change',()=>setQuality(input.files[0]?.name.toLowerCase()||''));
+function selection(files){
+ if(files.length<=1)return files[0];
+ const all=Array.from(files);
+ const hasExtension=(file,extensions)=>extensions.includes(file.name.split('.').pop().toLowerCase());
+ const assemblies=all.filter(file=>hasExtension(file,['sldasm']));
+ const parts=all.filter(file=>hasExtension(file,['sldprt']));
+ const gltf=all.filter(file=>hasExtension(file,['gltf','glb']));
+ const assets=all.filter(file=>hasExtension(file,['bin','png','jpg','jpeg']));
+ let name;
+ if(assemblies.length===1&&parts.length===all.length-1)name=assemblies[0].name+'.sldbundle';
+ else if(gltf.length===1&&assets.length===all.length-1)name=gltf[0].name+'.gltfpack';
+ else throw Error('Select one model, one SolidWorks assembly with its parts, or one glTF model with its buffers and images');
+ const header=new TextEncoder().encode(JSON.stringify(all.map(({name,size})=>({name,size}))));
+ if(all.length>512||header.length>65536)throw Error('Too many companion files');
+ const length=new ArrayBuffer(4);
+ new DataView(length).setUint32(0,header.length,true);
+ return new File([length,header,...all],name);
+}
+async function openFile(f,fromDisk=false){
+ if(go.disabled)return;
+ if(!f){status.textContent='Choose a model first.';return}
+ let uploadsPending=false, uploadError=null;
+ function checkGeometryUploads(){
+  if(uploadError)throw uploadError;
+  if(gl.isContextLost()||(uploadsPending&&gl.getError()!==gl.NO_ERROR)){
+   uploadError=Error('Unable to upload model buffers');
+   throw uploadError;
+  }
+  uploadsPending=false;
+ }
+ // Share the error check with textures so their asynchronous uploads cannot
+ // consume an error from geometry before the importer sees it.
+ reset(checkGeometryUploads);setBusy(true);const began=performance.now();
+ let reader;
+ try{
+  const extension=fromDisk?f.format:f.name.split('.').pop().toLowerCase();
+  const iges=['igs','iges'].includes(extension);
+  const threeMf=extension==='3mf';
+  const solidworks=['sldprt','sldasm','sldbundle'].includes(extension);
+  const nativeFormat=iges||threeMf||solidworks||['obj','ply','gltf','glb','gltfpack','fbx','ifc'].includes(extension);
+  const limit=nativeFormat?512:250;
+  if(!fromDisk&&f.size>limit*1024*1024)throw Error('File exceeds '+limit+' MiB');
+  if(extension==='stl'){
+   status.textContent='Reading '+f.name+' locally…';
+   const source=fromDisk?await fetch('/api/stream/'+f.id):f;
+   if(fromDisk&&!source.ok)throw Error('Unable to read the selected STL');
+   const positions=readStl(new Uint8Array(await source.arrayBuffer()));
+   const parsed=performance.now()-began;
+   document.getElementById('read').textContent=parsed.toFixed(1)+' ms';
+   addMesh(positions);
+   updateMeshProgress();
+   requestAnimationFrame(()=>{document.getElementById('first').textContent=(performance.now()-began).toFixed(1)+' ms*'});
+   const elapsed=performance.now()-began;
+   document.getElementById('total').textContent=elapsed.toFixed(1)+' ms';
+   status.textContent='Loaded '+triangles.toLocaleString()+' triangles directly from STL.';
+   return;
+  }
+  if(!nativeFormat&&!['step','stp','p21'].includes(extension))throw Error('Unsupported file extension');
+  if(extension==='ifc'&&document.body.dataset.ifc!=='enabled')throw Error('Install ifcopenshell to load IFC');
+  if(iges&&document.body.dataset.occt!=='enabled')throw Error('Install cadquery-ocp to load IGES');
+  if(nativeFormat&&!iges&&!threeMf&&!solidworks&&extension!=='ifc'&&!nativeMode)throw Error('This format requires the native VTX importer');
+  let id=f.id;
+  if(!fromDisk){
+   status.textContent='Uploading '+f.name+'...';
+   const r=await fetch('/api/upload',{method:'POST',headers:{'Content-Type':'application/octet-stream','X-VTX-Format':iges?'iges':nativeFormat?extension:'step'},body:f});
+   if(!r.ok)throw Error('Upload failed: '+r.status);
+   ({id}=await r.json());
+  }
+  status.textContent='Importing model and preparing geometry...';
+  const resp=await fetch('/api/stream/'+id+'?deflection='+document.getElementById('quality').value);
+  if(!resp.ok)throw Error('Import failed: '+resp.status);
+  const cached=resp.headers.get('X-STEPFlash-Cache')==='hit';
+  const engine=resp.headers.get('X-STEPFlash-Engine');
+  const usingOcct=engine==='occt';
+  reader=resp.body.getReader();
+  let didFirst=false, completed=null, indexed=null;
+  const frames=new MeshFrameReader((e,payload)=>{
+    if(completed)throw Error('Unexpected data after mesh completion');
+    const length=payload?.byteLength||0;
+    if(e.type==='meta'){
+     document.getElementById('read').textContent=cached?'cached':e.read_ms+' ms';
+     document.getElementById('transfer').textContent=engine==='iges'?e.transfer_ms+' ms':!usingOcct?'—':cached?'cached':e.transfer_ms+' ms';
+     status.textContent=!usingOcct?'Loading mesh…':(cached?'Loading cached geometry: ':'Imported ')+e.parts+' solid(s).';
+    }else if(e.type==='indexed'){
+     if(!complete(indexed)||indexed?.instances?.length===0)throw Error('Incomplete indexed mesh');
+     indexed=allocateIndexed(e);
+     uploadsPending=true;
+    }else if(e.type==='positions'||e.type==='indices'||e.type==='uv'||e.type==='colors'){
+     addIndexedBatch(indexed,e,payload);
+     uploadsPending=true;
+     if(!didFirst&&indexed.count&&!indexed.instances){didFirst=true;requestAnimationFrame(()=>{document.getElementById('first').textContent=Math.round(performance.now()-began)+' ms*'})}
+    }else if(e.type==='instances'){
+     addInstances(indexed,e,payload);
+     uploadsPending=true;
+     if(!didFirst){didFirst=true;requestAnimationFrame(()=>{document.getElementById('first').textContent=Math.round(performance.now()-began)+' ms*'})}
+    }else if(e.type==='part'){
+     if(length%36)throw Error('Invalid triangle payload');
+     if(payload){addMesh(words(payload,Float32Array));uploadsPending=true}
+     if(!didFirst && length){didFirst=true;requestAnimationFrame(()=>{document.getElementById('first').textContent=Math.round(performance.now()-began)+' ms*'})}
+     status.textContent='Displayed '+triangles.toLocaleString()+' triangles.';
+    }else if(e.type==='texture'||e.type==='texture_bytes'){
+     textures.receive(e,payload);
+    }else if(e.type==='done'){
+     if(!complete(indexed)||indexed?.instances?.length===0||e.triangles!==triangles||(e.points??0)!==points)throw Error('Incomplete mesh');
+     completed=e;
+    }else if(e.type==='error')throw Error(e.message);
+    else throw Error('Unknown mesh frame type');
+  }, e=>e.type==='positions'||e.type==='indices'||e.type==='uv'||e.type==='colors'||
+     e.type==='instances'||e.type==='part');
+  while(true){
+   const {done,value}=await reader.read();if(done)break;
+   frames.push(value);
+  }
+  frames.finish();
+  if(!completed)throw Error('Incomplete mesh stream');
+  checkGeometryUploads();
+  await textures.finish();
+  checkGeometryUploads();
+  updateMeshProgress();
+  document.getElementById('total').textContent=cached?'cached':completed.total_ms+' ms';
+  status.textContent=(cached?'Cache hit':'First-time import')+'. Browser elapsed '+Math.round(performance.now()-began)+' ms.'+
+   (completed.errors?' Meshing errors reported: '+completed.errors+'.':'')+(completed.warning?' '+completed.warning:'')+
+   (textures.failed?' Some textures could not be decoded or uploaded.':'');
+ }catch(e){
+  if(reader)reader.cancel().catch(()=>{});
+  reset();status.textContent='Error: '+e.message;
+ }finally{setBusy(false)}
+}
+disk.onclick=async()=>{
+ const previous=status.textContent;
+ setBusy(true);
+ status.textContent='Choose a model in the native file dialog…';
+ let job;
+ try{
+  const response=await fetch('/api/pick',{method:'POST'});
+  if(response.status===204){status.textContent=previous;return}
+  const data=await response.json().catch(()=>null);
+  if(!response.ok||!data?.id)throw Error(data?.error||'Unable to select a model');
+  job=data;
+ }catch(e){status.textContent='Error: '+e.message}
+ finally{setBusy(false)}
+ if(job){
+  input.value='';
+  document.getElementById('filename').textContent=job.name;
+  setQuality(job.name.toLowerCase());
+  openFile(job,true);
+ }
+};
+go.onclick=()=>{try{openFile(selection(input.files))}catch(e){status.textContent='Error: '+e.message}};
+sample.onclick=async()=>{const r=await fetch('/sample.step');if(!r.ok){status.textContent='Sample not available';return}openFile(new File([await r.blob()],'sample.step'))};
+</script></body></html>
+
