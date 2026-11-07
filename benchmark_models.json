@@ -1,0 +1,306 @@
+{
+  "schema_version": 1,
+  "verified_date": "2026-11-07",
+  "datasets": [
+    {
+      "id": "pine-tree-fbx",
+      "title": "Poly Haven Pine Tree 01",
+      "source_url": "https://polyhaven.com/a/pine_tree_01",
+      "license": {
+        "spdx": "CC0-1.0",
+        "source_url": "https://polyhaven.com/license"
+      },
+      "credit": [
+        "Rico Cilliers",
+        "Rob Tuytel",
+        "Poly Haven"
+      ],
+      "notes": "Large authored vegetation mesh with many material surfaces. Source metadata lists 17,427,094 triangles; imported counts below describe the FBX. Screening rendered foliage white and reported three warnings; appearance coverage needs follow-up.",
+      "files": [
+        {
+          "path": "pine-tree-fbx/pine_tree_01_1k.fbx",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/fbx/1k/pine_tree_01/pine_tree_01_1k.fbx",
+          "bytes": 648483964,
+          "sha256": "b220661091fb81046d9af751259c5d3e4f1cde3b79b48cdaddc79b4762515dc3"
+        },
+        {
+          "path": "pine-tree-fbx/textures/pine_tree_01_bark_diff_1k.png",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/png/1k/pine_tree_01/pine_tree_01_bark_diff_1k.png",
+          "bytes": 5568559,
+          "sha256": "91e79e9bd1d5d68922262b4eee752808c49c55c2941b531a65b586dae8984bc9"
+        },
+        {
+          "path": "pine-tree-fbx/textures/pine_tree_01_bark_disp_1k.png",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/png/1k/pine_tree_01/pine_tree_01_bark_disp_1k.png",
+          "bytes": 1633203,
+          "sha256": "8cce79758590f833bd8435c428110bcd656ff8e242c899acbd416b6eeb7e8606"
+        },
+        {
+          "path": "pine-tree-fbx/textures/pine_tree_01_bark_nor_gl_1k.png",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/png/1k/pine_tree_01/pine_tree_01_bark_nor_gl_1k.png",
+          "bytes": 5640903,
+          "sha256": "d0cdc8ff2f74da8023a1f18512f9db643284d94a698a4ac491f63c4c11c95211"
+        },
+        {
+          "path": "pine-tree-fbx/textures/pine_tree_01_bark_rough_1k.png",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/png/1k/pine_tree_01/pine_tree_01_bark_rough_1k.png",
+          "bytes": 2488380,
+          "sha256": "63c3785c47a2f4193e5054d9f8481da0bd41bc2bfc1a993cd8785fad6339fe97"
+        },
+        {
+          "path": "pine-tree-fbx/textures/pine_tree_01_trunk_a_diff_1k.png",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/png/1k/pine_tree_01/pine_tree_01_trunk_a_diff_1k.png",
+          "bytes": 5013819,
+          "sha256": "50e8911ac39d8eeb720d7412495d00f8639f2a0ad01dec1c22aa79efc16e9f08"
+        },
+        {
+          "path": "pine-tree-fbx/textures/pine_tree_01_trunk_a_nor_gl_1k.png",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/png/1k/pine_tree_01/pine_tree_01_trunk_a_nor_gl_1k.png",
+          "bytes": 4338077,
+          "sha256": "e1dfe1dcfd4d92eb7dd732cff98ac32c8a3aa5a36b9eea220e22030ea604ec09"
+        },
+        {
+          "path": "pine-tree-fbx/textures/pine_tree_01_trunk_a_rough_1k.png",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/png/1k/pine_tree_01/pine_tree_01_trunk_a_rough_1k.png",
+          "bytes": 1656557,
+          "sha256": "ebda61e833608c3df8d65018330c9e0bb80ec39b30d9416de0cc088c520ca8b6"
+        },
+        {
+          "path": "pine-tree-fbx/textures/pine_tree_01_trunk_b_diff_1k.png",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/png/1k/pine_tree_01/pine_tree_01_trunk_b_diff_1k.png",
+          "bytes": 4847111,
+          "sha256": "41bd8a65e0a827646b3a33dc1607eba2082ddc25fe714752259447c49d0600cc"
+        },
+        {
+          "path": "pine-tree-fbx/textures/pine_tree_01_trunk_b_nor_gl_1k.png",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/png/1k/pine_tree_01/pine_tree_01_trunk_b_nor_gl_1k.png",
+          "bytes": 4129931,
+          "sha256": "fe5f1dafe611a7f04142abf7878622a6212ed7c1737711d548ec3301b3210cf7"
+        },
+        {
+          "path": "pine-tree-fbx/textures/pine_tree_01_trunk_b_rough_1k.png",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/png/1k/pine_tree_01/pine_tree_01_trunk_b_rough_1k.png",
+          "bytes": 1626272,
+          "sha256": "ff399f6d054f903deee0e4d455c09f12ac3441f5c9547a0e9d06c163e6958dee"
+        },
+        {
+          "path": "pine-tree-fbx/textures/pine_tree_01_trunk_c_diff_1k.png",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/png/1k/pine_tree_01/pine_tree_01_trunk_c_diff_1k.png",
+          "bytes": 5140137,
+          "sha256": "edbceb8657a036e98831a3550433ab2d78928fcf9060e400ca84748cedcaf962"
+        },
+        {
+          "path": "pine-tree-fbx/textures/pine_tree_01_trunk_c_nor_gl_1k.png",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/png/1k/pine_tree_01/pine_tree_01_trunk_c_nor_gl_1k.png",
+          "bytes": 4450875,
+          "sha256": "08a40a7486ad3a8d97cf3da0afe5951f1a038cb51395020e2c4a2113f46d1610"
+        },
+        {
+          "path": "pine-tree-fbx/textures/pine_tree_01_trunk_c_rough_1k.png",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/png/1k/pine_tree_01/pine_tree_01_trunk_c_rough_1k.png",
+          "bytes": 1722380,
+          "sha256": "48fcced840b4beed4e03e09a352a67dd36185c9cd4247090069391bfb9746de9"
+        },
+        {
+          "path": "pine-tree-fbx/textures/pine_tree_01_twig_diff_1k.png",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/png/1k/pine_tree_01/pine_tree_01_twig_diff_1k.png",
+          "bytes": 3208228,
+          "sha256": "d02c031de64b8ad671f3dd0da19870fa4783d912ae6674aeab0702871deeaeaa"
+        },
+        {
+          "path": "pine-tree-fbx/textures/pine_tree_01_twig_nor_gl_1k.png",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/png/1k/pine_tree_01/pine_tree_01_twig_nor_gl_1k.png",
+          "bytes": 3021524,
+          "sha256": "4b79eda7fe8843d71f9289bd0d3897a1b0a7310b1872b390a589a04b510b0597"
+        },
+        {
+          "path": "pine-tree-fbx/textures/pine_tree_01_twig_rough_1k.png",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/png/1k/pine_tree_01/pine_tree_01_twig_rough_1k.png",
+          "bytes": 1342516,
+          "sha256": "c12da3dd6c1588f50307d96807d78115757f110bc562811369d90b86bd6fddc7"
+        }
+      ],
+      "models": [
+        {
+          "label": "Pine Tree 01 FBX",
+          "path": "pine-tree-fbx/pine_tree_01_1k.fbx",
+          "bytes": 648483964,
+          "sha256": "b220661091fb81046d9af751259c5d3e4f1cde3b79b48cdaddc79b4762515dc3",
+          "screening": {
+            "triangles": 17182252,
+            "issues": 3,
+            "backend": "Vulkan",
+            "rendered_pixels": 18400
+          },
+          "triangles": 17182252
+        }
+      ]
+    },
+    {
+      "id": "voron-step",
+      "title": "Voron 2.4r2 printer assembly",
+      "source_url": "https://github.com/VoronDesign/Voron-2/tree/7b32e405f0719881cca782500c822e01e3b16bf2/CAD",
+      "license": {
+        "spdx": "GPL-3.0",
+        "source_url": "https://github.com/VoronDesign/Voron-2/blob/7b32e405f0719881cca782500c822e01e3b16bf2/LICENSE"
+      },
+      "credit": [
+        "Voron Design"
+      ],
+      "notes": "Large mechanical CAD assembly. VTX and pinned Foxtrot report 666 errors and the same oriented triangle hash. The matching result contains the same tessellation gaps.",
+      "files": [
+        {
+          "path": "voron-step/Voron_2.4r2_Assembly_STEP.zip",
+          "url": "https://raw.githubusercontent.com/VoronDesign/Voron-2/7b32e405f0719881cca782500c822e01e3b16bf2/CAD/Voron_2.4r2_Assembly_STEP.zip",
+          "bytes": 41533391,
+          "sha256": "36c6c58e096aa89aa05a0ef22f3b49cbceedc950424332772461ab0c779cc1c6",
+          "extract_to": "voron-step/extracted"
+        }
+      ],
+      "models": [
+        {
+          "label": "Voron 2.4r2 STEP",
+          "path": "voron-step/extracted/Voron_2.4r2_Assembly.step",
+          "bytes": 241522213,
+          "sha256": "06b372e40217caa1a7d1f516cb74887247f809e41e1e389f740f290e98441b55",
+          "screening": {
+            "triangles": 6429086,
+            "issues": 666,
+            "backend": "Vulkan",
+            "rendered_pixels": 18975
+          },
+          "triangles": 6429086
+        }
+      ]
+    },
+    {
+      "id": "a-beautiful-game",
+      "title": "A Beautiful Game",
+      "source_url": "https://github.com/KhronosGroup/glTF-Sample-Assets/tree/8f492390ddc7a2ae221a1369ef560589cf8c70fb/Models/ABeautifulGame",
+      "license": {
+        "spdx": "CC-BY-4.0",
+        "source_url": "https://github.com/KhronosGroup/glTF-Sample-Assets/blob/8f492390ddc7a2ae221a1369ef560589cf8c70fb/Models/ABeautifulGame/LICENSE.md"
+      },
+      "credit": [
+        "MaterialX Project / ASWF",
+        "Ed Mackey"
+      ],
+      "notes": "Authored chess scene with instancing, textures, transmission and volume materials. Screening validates import and drawing; full material equivalence remains unverified.",
+      "files": [
+        {
+          "path": "a-beautiful-game/ABeautifulGame.glb",
+          "url": "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/8f492390ddc7a2ae221a1369ef560589cf8c70fb/Models/ABeautifulGame/glTF-Binary/ABeautifulGame.glb",
+          "bytes": 42977928,
+          "sha256": "bd7133b4b322aae97c589b8839dae8155ad2546acb35ae32a127e722a959d007"
+        }
+      ],
+      "models": [
+        {
+          "label": "A Beautiful Game",
+          "path": "a-beautiful-game/ABeautifulGame.glb",
+          "bytes": 42977928,
+          "sha256": "bd7133b4b322aae97c589b8839dae8155ad2546acb35ae32a127e722a959d007",
+          "screening": {
+            "triangles": 1499072,
+            "issues": 0,
+            "backend": "Vulkan",
+            "rendered_pixels": 40007
+          },
+          "triangles": 1499072
+        }
+      ],
+      "geometry_check": "Exact numeric coordinates and winding. Initial byte differences were 438 signed-zero coordinates."
+    },
+    {
+      "id": "san-miguel",
+      "title": "San Miguel archive",
+      "source_url": "https://casual-effects.com/data/",
+      "license": {
+        "spdx": null,
+        "source_url": "https://casual-effects.com/g3d/data10/research/model/San_Miguel/info.js",
+        "status": "conflicting notices",
+        "index_spdx": "CC-BY-3.0",
+        "bundled_notice": "Research and educational use with attribution",
+        "bundled_notice_path": "san-miguel/extracted/license.txt"
+      },
+      "credit": [
+        "Guillermo M. Leal Llaguno",
+        "Morgan McGuire",
+        "Guedis Cardenas",
+        "Michael Mara",
+        "Nicholas Hull"
+      ],
+      "notes": "Research fixture with conflicting notices. The archive index lists CC BY 3.0. Bundled license.txt grants research and educational use with attribution. Preserve both notices and resolve redistribution rights before redistributing the archive.",
+      "files": [
+        {
+          "path": "san-miguel/San_Miguel.zip",
+          "url": "https://casual-effects.com/g3d/data10/research/model/San_Miguel/San_Miguel.zip",
+          "bytes": 535519642,
+          "sha256": "85874077735808150e679b3c71d70a37a270cb8833f4911325aa1099da3f7d4a",
+          "extract_to": "san-miguel/extracted"
+        }
+      ],
+      "models": [
+        {
+          "label": "San Miguel high",
+          "path": "san-miguel/extracted/san-miguel.obj",
+          "bytes": 1143041382,
+          "sha256": "22533258be1d94aa1ece29053e98f11c91ebc17a8a3626545dee3cecf90b71e3",
+          "screening": {
+            "triangles": 9980699,
+            "issues": 0,
+            "backend": "Vulkan",
+            "rendered_pixels": 38456
+          },
+          "triangles": 9980699
+        },
+        {
+          "label": "San Miguel low",
+          "path": "san-miguel/extracted/san-miguel-low-poly.obj",
+          "bytes": 628033664,
+          "sha256": "7142519da39589857d7dfcd3143a7b41bd444279f65dd5177c3adfad29a1ecc9",
+          "screening": {
+            "triangles": 5617451,
+            "issues": 0,
+            "backend": "Vulkan",
+            "rendered_pixels": 38496
+          },
+          "triangles": 5617451
+        }
+      ],
+      "geometry_check": "Exact coordinates and winding with cyclic triangle starting vertices and signed zero normalized."
+    },
+    {
+      "id": "rungholt",
+      "title": "Rungholt",
+      "source_url": "https://casual-effects.com/data/",
+      "license": {
+        "spdx": "CC-BY-3.0",
+        "source_url": "https://casual-effects.com/g3d/data10/research/model/rungholt/info.js"
+      },
+      "credit": [
+        "kescha",
+        "Morgan McGuire"
+      ],
+      "notes": "Previously benchmarked public OBJ scene. The archive includes the creator's permission notice in copyright.txt.",
+      "files": [
+        {
+          "path": "rungholt/rungholt.zip",
+          "url": "https://casual-effects.com/g3d/data10/research/model/rungholt/rungholt.zip",
+          "bytes": 49767647,
+          "sha256": "dd927901828e19e042e02448f3814e18592c9c076b39bff226bb8dc7a5ad6f4a",
+          "extract_to": "rungholt/extracted"
+        }
+      ],
+      "models": [
+        {
+          "label": "Rungholt",
+          "path": "rungholt/extracted/rungholt.obj",
+          "bytes": 275675419,
+          "sha256": "15ac8bf4f0e35d2bd4802202cf4a9d8d66b5b5873592a2a3d1cc1a8cabc5ba37",
+          "triangles": 6704264
+        }
+      ]
+    }
+  ]
+}

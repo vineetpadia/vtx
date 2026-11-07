@@ -9,11 +9,14 @@ The following comparisons are recorded development benchmarks on the same Window
 | Format and fixture | Compared project | Reference, ms | VTX, ms | Speedup | Timed output |
 |---|---|---:|---:|---:|---|
 | [STEP, Raspberry Pi 3](step_indexed_foxtrot.csv) | [Foxtrot](https://github.com/formlabs/foxtrot/tree/69fb37688892246e670fc08eb60b7d3a92d70d3f) | 258.17 | 125.07 | 2.06× | Tessellated geometry |
+| [STEP, Voron 2.4r2 assembly](voron_foxtrot_benchmark.csv) | [Foxtrot](https://github.com/formlabs/foxtrot/tree/69fb37688892246e670fc08eb60b7d3a92d70d3f) | 4,415.09 | 3,181.74 | 1.39× | Tessellated geometry, 666 shared errors |
 | [STL, 2-million-triangle grid](benchmark_stl.py) | [pyvista-stl 0.5.3](https://github.com/pyvista/pyvista-stl) with NumPy expansion | 111.06 | 49.65 | 2.24× | Packed triangle positions |
 | [OBJ, Rungholt geometry](obj_benchmark_current.csv) | [RapidOBJ](https://github.com/guybrush77/rapidobj/tree/ccca1622432a3aeb2fb85ff9085219d008d11afc) | 196.85 | 60.55 | 3.25× | Triangulated geometry |
 | [OBJ, Rungholt with materials](obj_material_benchmark.csv) | [RapidOBJ](https://github.com/guybrush77/rapidobj/tree/ccca1622432a3aeb2fb85ff9085219d008d11afc) | 117.56 | 81.95 | 1.43× | Geometry and material assignments |
+| [OBJ, San Miguel high, 1.14 GB](san_miguel_benchmark.csv) | [RapidOBJ](https://github.com/guybrush77/rapidobj/tree/ccca1622432a3aeb2fb85ff9085219d008d11afc) | 632.89 | 214.41 | 2.95× | Triangulated geometry, cyclic vertex check |
 | [PLY, 6-million-point RGB cloud](ply_benchmark.csv) | [Tinyply 3.0](https://github.com/ddiakopoulos/tinyply/tree/c9bb690dfe5e9105961e9e28120c48c9ae084bc6) | 185.84 | 16.96 | 10.95× | Positions and RGB bytes |
 | [GLB, 2-million-triangle grid](gltf_benchmark.csv) | [FastGLTF](https://github.com/spnda/fastgltf/tree/7ed89f6a2e3119bf6721149bfee7ec54658a90b5) | 37.88 | 17.70 | 2.14× | Indexed geometry and scene transforms |
+| [GLB, A Beautiful Game](beautiful_game_benchmark.csv) | [FastGLTF](https://github.com/spnda/fastgltf/tree/7ed89f6a2e3119bf6721149bfee7ec54658a90b5) | 36.96 | 5.48 | 6.74× | Geometry and scene transforms, signed zero normalized |
 | [IFC4.3, buildingSMART bridge](ifc_native_benchmark.csv) | [IFClite 28.2.0](https://crates.io/crates/ifc-lite-processing/28.2.0) default full pass | 21.03 | 12.24 | 1.72× | Geometry and draw plan |
 | [3MF, 500,000-triangle textured grid](three_mf_xml_benchmark.csv) | [lib3mf 2.5.0](https://github.com/3MFConsortium/lib3mf/releases/tag/v2.5.0) | 641.38 | 260.41 | 2.46× | Placed geometry and material data |
 | [3MF, eight-part grid, 4 million triangles](three_mf_xml_benchmark.csv) | [lib3mf 2.5.0](https://github.com/3MFConsortium/lib3mf/releases/tag/v2.5.0) | 2,399.98 | 114.80 | 20.91× | Placed geometry |
@@ -21,7 +24,9 @@ The following comparisons are recorded development benchmarks on the same Window
 
 The speedups use unrounded medians. These intervals cover file reading and import through the listed output. Viewer startup, GPU upload, and first-frame measurements appear in the standalone viewer section. Linked CSVs contain individual trials, and the STL link contains its reproduction harness. The STL row uses VTX's JavaScript decoder under Node.js. Its reference includes expansion from pyvista-stl's indexed mesh into the same packed triangle layout. pyvista-stl's indexed result alone took 60.66 ms in that run.
 
-Reader coverage also differs. RapidOBJ's default loader reads authored normals and other OBJ attributes beyond VTX's geometry path. VTX uses IFClite for IFC geometry, with metadata filtering, worker settings, and draw planning optimized for viewing. VTX uses ufbx for FBX import. The STEP comparison retains the same 14 counted tessellation errors in both builds. The per-format sections describe the matching geometry checks and supported features.
+Reader coverage also differs. RapidOBJ's default loader reads authored normals and other OBJ attributes beyond VTX's geometry path. VTX uses IFClite for IFC geometry, with metadata filtering, worker settings, and draw planning optimized for viewing. VTX uses ufbx for FBX import. The Raspberry Pi STEP comparison retains the same 14 counted tessellation errors in both builds. The per-format sections describe the matching geometry checks and supported features.
+
+The Voron, San Miguel, and A Beautiful Game comparisons each use 12 alternating fresh processes per reader with a warm file cache. Voron matched 6,429,086 oriented triangles, with 666 tessellation errors in both readers. San Miguel matched after rotating the starting vertex of ten triangles. A Beautiful Game's initial byte differences were 438 positive/negative zero coordinates. `benchmark_obj.py --geometry-check cyclic` normalizes signed zero and triangle starting vertices while retaining exact coordinates, face order, and winding. Its default check remains byte-exact. [Geometry checks](public_model_geometry_checks.json) · [Public model corpus](#public-benchmark-models)
 
 ## Run the standalone viewer
 
@@ -461,3 +466,30 @@ Nine browser trials per build rotated order in hardware-accelerated Chrome on th
 For Raspberry Pi 3, the pinned Foxtrot core feeding the same VTX viewer reached the full draw in 333.2 ms. In a separate 12-run comparison, native file-to-mesh medians were 258.17 ms for Foxtrot and 125.07 ms for VTX. Both produced the same 327,175 oriented triangles. [Core trials](step_indexed_foxtrot.csv)
 
 Reproduce the geometry and transport check with `python benchmark_transport.py <packed-exe> <indexed-exe> <input.step> --ignore-triangle-order --runs 9`. The option allows the STEP engine's existing variation in solid emission order and retains each triangle's exact float32 coordinates, winding, and multiplicity. `STEPFLASH_PROFILE=1` logs the time spent building local index batches and computing their bounds.
+
+## Public benchmark models
+
+Earlier tests used public Rungholt, Sponza, Stanford Bunny, Khronos, buildingSMART, NIST, ufbx, and 3MF Consortium fixtures alongside generated grids. The following corpus adds larger authored scenes and a mechanical assembly. File sizes describe the model input, with archives and texture companions recorded separately in the manifest.
+
+| Model | Format | Input size | Imported triangles | License | Coverage |
+|---|---|---:|---:|---|---|
+| [Pine Tree 01](https://polyhaven.com/a/pine_tree_01) | FBX | 648.5 MB | 17,182,252 | CC0-1.0 | New, 3 import warnings |
+| [Voron 2.4r2 assembly](https://github.com/VoronDesign/Voron-2/tree/7b32e405f0719881cca782500c822e01e3b16bf2/CAD) | STEP | 241.5 MB | 6,429,086 | GPL-3.0 repository license | New, 666 errors shared with Foxtrot |
+| [A Beautiful Game](https://github.com/KhronosGroup/glTF-Sample-Assets/tree/8f492390ddc7a2ae221a1369ef560589cf8c70fb/Models/ABeautifulGame) | GLB | 43.0 MB | 1,499,072 | CC-BY-4.0 | New, geometry comparison passed |
+| [San Miguel high](https://casual-effects.com/data/) | OBJ | 1,143.0 MB | 9,980,699 | Conflicting notices, research fixture | New, geometry comparison passed |
+| [San Miguel low](https://casual-effects.com/data/) | OBJ | 628.0 MB | 5,617,451 | Conflicting notices, research fixture | New, rendered with zero import warnings |
+| [Rungholt](https://casual-effects.com/data/) | OBJ | 275.7 MB | 6,704,264 | CC-BY-3.0 | Previously benchmarked |
+
+The [manifest](benchmark_models.json) records source URLs, author credits, licenses, input sizes, archive members, and SHA-256 checksums for model and companion files. The downloaded models stay in the selected local directory. The default `.benchmark-models` directory is ignored by Git.
+
+```sh
+python fetch_benchmark_models.py
+python fetch_benchmark_models.py pine-tree-fbx voron-step a-beautiful-game rungholt
+python fetch_benchmark_models.py pine-tree-fbx --directory /path/to/VTX_Benchmark_Models
+```
+
+The first command lists available datasets and download sizes. The downloader verifies cached and downloaded files, extracts archives, and checks model hashes. The Pine Tree FBX package includes its 1K texture companions.
+
+Pine Tree's screening render has white foliage and three appearance/import warnings. Voron retains the same tessellation gaps as Foxtrot. A Beautiful Game exercises transmission and volume materials, whose full appearance equivalence remains unverified. The [screening record](public_models_screening.json) contains single-load observations, including runs made while downloads were active.
+
+San Miguel's archive index lists CC BY 3.0, while the bundled `license.txt` grants research and educational use with attribution. Both notices are recorded in the manifest. It is retained as a research fixture with redistribution rights requiring clarification. The archive is credited to Guillermo M. Leal Llaguno, with improvements by Morgan McGuire and collaborators. [Archive and attribution](https://casual-effects.com/data/)

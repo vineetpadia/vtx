@@ -1,13 +1,41 @@
 """Compare release mesh readers and verify the packed triangle positions."""
 
 import argparse
+import array
 import csv
 import hashlib
 from pathlib import Path
 import statistics
 import subprocess
+import sys
 import tempfile
 import time
+
+
+def geometry_digest(path, mode):
+    digest = hashlib.sha256()
+    with path.open("rb") as source:
+        while chunk := source.read(36 * 65536):
+            if mode == "cyclic":
+                words = array.array("I", chunk)
+                if sys.byteorder != "little":
+                    words.byteswap()
+                for index, value in enumerate(words):
+                    if value == 0x80000000:
+                        words[index] = 0
+                if sys.byteorder != "little":
+                    words.byteswap()
+                chunk = words.tobytes()
+                for offset in range(0, len(chunk), 36):
+                    triangle = chunk[offset:offset + 36]
+                    digest.update(min(
+                        triangle,
+                        triangle[12:] + triangle[:12],
+                        triangle[24:] + triangle[:24],
+                    ))
+            else:
+                digest.update(chunk)
+    return digest.hexdigest()
 
 
 def run(executable, model, output=None):
@@ -29,6 +57,8 @@ def main():
     parser.add_argument("--runs", type=int, default=12)
     parser.add_argument("--csv", type=Path, required=True)
     parser.add_argument("--baseline-name", default="RapidOBJ")
+    parser.add_argument("--geometry-check", choices=("exact", "cyclic"), default="exact",
+                        help="Cyclic mode normalizes signed zero and triangle starting vertices, preserving face order and winding")
     parser.add_argument("--warm-cache", action="store_true",
                         help="Read the input before each timed process to prime the OS cache")
     args = parser.parse_args()
@@ -43,14 +73,11 @@ def main():
             _, _, count = run(exe, model, output)
             if output.stat().st_size != count * 36:
                 raise SystemExit(f"{label} emitted an invalid packed triangle file")
-            digest = hashlib.sha256()
-            with output.open("rb") as source:
-                while chunk := source.read(1024 * 1024):
-                    digest.update(chunk)
-            checks.append((count, digest.hexdigest()))
+            checks.append((count, geometry_digest(output, args.geometry_check)))
     if checks[0] != checks[1]:
         raise SystemExit(f"Triangle geometry or order differs: {checks}")
-    print(f"Exact ordered triangle match: {checks[0][0]:,}; SHA-256 {checks[0][1]}", flush=True)
+    label = "Exact ordered triangle match" if args.geometry_check == "exact" else "Cyclic ordered triangle match"
+    print(f"{label}: {checks[0][0]:,}; SHA-256 {checks[0][1]}", flush=True)
 
     rows = []
     warm_buffer = bytearray(4 * 1024 * 1024) if args.warm_cache else None
@@ -66,8 +93,13 @@ def main():
             rows.append((trial + 1, label, total, wall))
     with args.csv.open("w", encoding="utf-8", newline="") as output:
         writer = csv.writer(output)
-        writer.writerow(("run", "engine", "read_to_triangles_ms", "process_wall_ms"))
-        writer.writerows(rows)
+        columns = ("run", "engine", "read_to_triangles_ms", "process_wall_ms")
+        if args.geometry_check == "cyclic":
+            writer.writerow((*columns, "geometry_check"))
+            writer.writerows((*row, args.geometry_check) for row in rows)
+        else:
+            writer.writerow(columns)
+            writer.writerows(rows)
     for label, _ in engines:
         samples = [row for row in rows if row[1] == label]
         total = statistics.median(row[2] for row in samples)

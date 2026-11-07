@@ -1,6 +1,7 @@
 __pycache__/
 *.py[cod]
 /native/target/
+/.benchmark-models/
 .env
 .env.*
 !.env.example

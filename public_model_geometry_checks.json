@@ -1,0 +1,42 @@
+{
+  "san_miguel_different_ordered_triangles": 10,
+  "san_miguel_same_oriented_multiset_after_cyclic_rotation": true,
+  "san_miguel_differing_triangle_indices": [
+    3514894,
+    3514895,
+    3514896,
+    3514897,
+    3514898,
+    3514899,
+    3514900,
+    3514901,
+    3514902,
+    3514903
+  ],
+  "beautiful_game_difference": "signed zero only",
+  "beautiful_game_signed_zero_coordinate_count": 438,
+  "checks": [
+    {
+      "model": "San Miguel high",
+      "triangles": 9980699,
+      "mode": "cyclic",
+      "sha256": "478c7768be523153d894d7ce2c402faf5cd165a46c02e1a2e6dcaa5e247c5ef4",
+      "reference": "RapidOBJ"
+    },
+    {
+      "model": "A Beautiful Game",
+      "triangles": 1499072,
+      "mode": "cyclic",
+      "sha256": "bebee3fae655cad0996d7853c68532cbc5f45bb914279f54e88d98fddf32b143",
+      "reference": "FastGLTF"
+    },
+    {
+      "model": "Voron 2.4r2 STEP",
+      "triangles": 6429086,
+      "mode": "oriented sorted triangles",
+      "sha256": "7894831d2059102f83dad5455cec88b3596973e0a5d527c72de35af9bd8cef2c",
+      "reference": "Foxtrot",
+      "shared_errors": 666
+    }
+  ]
+}
