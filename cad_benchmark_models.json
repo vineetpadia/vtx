@@ -1,0 +1,624 @@
+{
+  "description": "Public online CAD corpus for VTX import and performance testing. Downloaded originals are gitignored; see dataset-specific terms and source pages.",
+  "retrieved": "2026-11-07",
+  "datasets": [
+    {
+      "id": "cad-autodesk",
+      "title": "Autodesk AutoCAD LT sample drawings",
+      "source": "https://www.autodesk.com/support/technical/article/caas/tsarticles/ts/01em4r6LLJgnQQVBlk5GqD.html",
+      "notes": "Publicly downloadable vendor samples; no separate sample redistribution license verified. Download locally for testing; original files are not committed.",
+      "license": {
+        "spdx": null,
+        "status": "vendor samples"
+      },
+      "files": [
+        {
+          "path": "cad/autodesk/air_suspension.dwg",
+          "bytes": 179680,
+          "sha256": "e64ebde192fb29409a538c3ff5e91abad97665d201033e91774f6ddb988022b0",
+          "url": "https://images.autodesk.com/adsk/files/air_suspension.dwg"
+        },
+        {
+          "path": "cad/autodesk/home_floor_plan.dwg",
+          "bytes": 2416480,
+          "sha256": "5d3fc31fac4f31acfb44ad9b19a24217e6700822c89e8057aebab322481a6187",
+          "url": "https://images.autodesk.com/adsk/files/home_floor_plan.dwg"
+        },
+        {
+          "path": "cad/autodesk/landscape_plan.dwg",
+          "bytes": 713952,
+          "sha256": "39db67d9fc073b1ca53bde07142b45e23ef406602d69fcb6c3182c6c7dfefbb8",
+          "url": "https://images.autodesk.com/adsk/files/landscape_plan.dwg"
+        },
+        {
+          "path": "cad/autodesk/mechanical_example-imperial.dwg",
+          "bytes": 142267,
+          "sha256": "854c8ebed8726add72ba4a9a2a19ba0d010372f5cadefb40e648cdf881cad858",
+          "url": "https://images.autodesk.com/adsk/files/mechanical_example-imperial.dwg"
+        },
+        {
+          "path": "cad/autodesk/civil_example-imperial.dwg",
+          "bytes": 169592,
+          "sha256": "45b419d0c7382eb271079b80c3237a52183f4fa09e7b495c3d7a65c6baa927dc",
+          "url": "https://images.autodesk.com/adsk/files/civil_example-imperial.dwg"
+        },
+        {
+          "path": "cad/autodesk/building.dwg",
+          "bytes": 503648,
+          "sha256": "f50c6f54fa7db4fcde94fd0fd18a6b649c4b90bc87ec312d17d01629636d3b4b",
+          "url": "https://images.autodesk.com/adsk/files/building.dwg"
+        },
+        {
+          "path": "cad/autodesk/architectural_-_annotation_scaling_and_multileaders.dwg",
+          "bytes": 188992,
+          "sha256": "0e74f0aa84b1323c922345f067739c42ee26213dea010b407b87a94212271654",
+          "url": "https://images.autodesk.com/adsk/files/architectural_-_annotation_scaling_and_multileaders.dwg"
+        },
+        {
+          "path": "cad/autodesk/pumping_station.dwg",
+          "bytes": 782976,
+          "sha256": "a411706efee0b3fc1ee3afd5ff5d3545c20c97fabf48ecb2eed7e181de071e94",
+          "url": "https://images.autodesk.com/adsk/files/pumping_station.dwg"
+        }
+      ],
+      "models": [
+        {
+          "path": "cad/autodesk/air_suspension.dwg",
+          "bytes": 179680,
+          "sha256": "e64ebde192fb29409a538c3ff5e91abad97665d201033e91774f6ddb988022b0",
+          "tags": [
+            "mechanical",
+            "dimensions"
+          ]
+        },
+        {
+          "path": "cad/autodesk/home_floor_plan.dwg",
+          "bytes": 2416480,
+          "sha256": "5d3fc31fac4f31acfb44ad9b19a24217e6700822c89e8057aebab322481a6187",
+          "tags": [
+            "architecture",
+            "large-real-drawing"
+          ]
+        },
+        {
+          "path": "cad/autodesk/landscape_plan.dwg",
+          "bytes": 713952,
+          "sha256": "39db67d9fc073b1ca53bde07142b45e23ef406602d69fcb6c3182c6c7dfefbb8",
+          "tags": [
+            "landscape",
+            "blocks"
+          ]
+        },
+        {
+          "path": "cad/autodesk/mechanical_example-imperial.dwg",
+          "bytes": 142267,
+          "sha256": "854c8ebed8726add72ba4a9a2a19ba0d010372f5cadefb40e648cdf881cad858",
+          "tags": [
+            "mechanical",
+            "imperial"
+          ]
+        },
+        {
+          "path": "cad/autodesk/civil_example-imperial.dwg",
+          "bytes": 169592,
+          "sha256": "45b419d0c7382eb271079b80c3237a52183f4fa09e7b495c3d7a65c6baa927dc",
+          "tags": [
+            "civil",
+            "imperial"
+          ]
+        },
+        {
+          "path": "cad/autodesk/building.dwg",
+          "bytes": 503648,
+          "sha256": "f50c6f54fa7db4fcde94fd0fd18a6b649c4b90bc87ec312d17d01629636d3b4b",
+          "tags": [
+            "architecture"
+          ]
+        },
+        {
+          "path": "cad/autodesk/architectural_-_annotation_scaling_and_multileaders.dwg",
+          "bytes": 188992,
+          "sha256": "0e74f0aa84b1323c922345f067739c42ee26213dea010b407b87a94212271654",
+          "tags": [
+            "architecture",
+            "annotation"
+          ]
+        },
+        {
+          "path": "cad/autodesk/pumping_station.dwg",
+          "bytes": 782976,
+          "sha256": "a411706efee0b3fc1ee3afd5ff5d3545c20c97fabf48ecb2eed7e181de071e94",
+          "tags": [
+            "mechanical",
+            "infrastructure"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "cad-trattocad",
+      "title": "TrattoCAD sample drawings",
+      "source": "https://trattocad.com/samples",
+      "notes": "Source explicitly permits testing and teaching. No broader redistribution permission assumed; originals stay local.",
+      "license": {
+        "spdx": null,
+        "status": "free for testing and teaching"
+      },
+      "files": [
+        {
+          "path": "cad/trattocad/trattocad-sample-apartment.dwg",
+          "bytes": 25213,
+          "sha256": "1302ccc8705011ecec80e0237f79175305be0936ebaf040a4e27e0be2a56a705",
+          "url": "https://trattocad.com/samples/trattocad-sample-apartment.dwg"
+        },
+        {
+          "path": "cad/trattocad/trattocad-sample-apartment.dxf",
+          "bytes": 165593,
+          "sha256": "7f5ce0da3c8e011c586bb07eb568c5389e47f7166d72f3e476a9bf57817c94f0",
+          "url": "https://trattocad.com/samples/trattocad-sample-apartment.dxf"
+        },
+        {
+          "path": "cad/trattocad/trattocad-sample-office-hvac.dxf",
+          "bytes": 41865,
+          "sha256": "14453d70756c71c872eadb58e5a700b3264f2a3513f5c45802cca6bec66ab4a3",
+          "url": "https://trattocad.com/samples/trattocad-sample-office-hvac.dxf"
+        },
+        {
+          "path": "cad/trattocad/trattocad-sample-flange.dxf",
+          "bytes": 25123,
+          "sha256": "ede6e4f99e339949d5c95c8a426b0414ff5e7b9da294eeb20190e0a9dc35b759",
+          "url": "https://trattocad.com/samples/trattocad-sample-flange.dxf"
+        },
+        {
+          "path": "cad/trattocad/trattocad-sample-site-plan.dxf",
+          "bytes": 34883,
+          "sha256": "f8e7d98ddba6d1def0deb3c5c99e4084183c7645050126c2258adc15a78b5b35",
+          "url": "https://trattocad.com/samples/trattocad-sample-site-plan.dxf"
+        },
+        {
+          "path": "cad/trattocad/trattocad-sample-3d-pulley.dwg",
+          "bytes": 339630,
+          "sha256": "6002b39780e7c1c3980c885f319c1b03721aa8ae216ca3c16d3a619ebaa11ad6",
+          "url": "https://trattocad.com/samples/trattocad-sample-3d-pulley.dwg"
+        },
+        {
+          "path": "cad/trattocad/trattocad-sample-3d-pulley.dxf",
+          "bytes": 2378316,
+          "sha256": "ee156f0d02a2e051be014678eeee3366882030849ff3706b1275105383e4f4c2",
+          "url": "https://trattocad.com/samples/trattocad-sample-3d-pulley.dxf"
+        },
+        {
+          "path": "cad/trattocad/trattocad-sample-3d-house.dwg",
+          "bytes": 48744,
+          "sha256": "894d2c8b19000d39e2d1819ef9eacf87481dd3bb58718ec32bf4deb688a8150b",
+          "url": "https://trattocad.com/samples/trattocad-sample-3d-house.dwg"
+        },
+        {
+          "path": "cad/trattocad/trattocad-sample-3d-house.dxf",
+          "bytes": 334575,
+          "sha256": "703ec49ec6a26773ceb835fc062a7d942c6d0e36d031118572d59474599b7ff7",
+          "url": "https://trattocad.com/samples/trattocad-sample-3d-house.dxf"
+        }
+      ],
+      "models": [
+        {
+          "path": "cad/trattocad/trattocad-sample-apartment.dwg",
+          "bytes": 25213,
+          "sha256": "1302ccc8705011ecec80e0237f79175305be0936ebaf040a4e27e0be2a56a705",
+          "tags": [
+            "architecture",
+            "paired-formats"
+          ]
+        },
+        {
+          "path": "cad/trattocad/trattocad-sample-apartment.dxf",
+          "bytes": 165593,
+          "sha256": "7f5ce0da3c8e011c586bb07eb568c5389e47f7166d72f3e476a9bf57817c94f0",
+          "tags": [
+            "architecture",
+            "paired-formats"
+          ]
+        },
+        {
+          "path": "cad/trattocad/trattocad-sample-office-hvac.dxf",
+          "bytes": 41865,
+          "sha256": "14453d70756c71c872eadb58e5a700b3264f2a3513f5c45802cca6bec66ab4a3",
+          "tags": [
+            "mep",
+            "layers"
+          ]
+        },
+        {
+          "path": "cad/trattocad/trattocad-sample-flange.dxf",
+          "bytes": 25123,
+          "sha256": "ede6e4f99e339949d5c95c8a426b0414ff5e7b9da294eeb20190e0a9dc35b759",
+          "tags": [
+            "mechanical",
+            "dimensions",
+            "hatches"
+          ]
+        },
+        {
+          "path": "cad/trattocad/trattocad-sample-site-plan.dxf",
+          "bytes": 34883,
+          "sha256": "f8e7d98ddba6d1def0deb3c5c99e4084183c7645050126c2258adc15a78b5b35",
+          "tags": [
+            "civil",
+            "contours"
+          ]
+        },
+        {
+          "path": "cad/trattocad/trattocad-sample-3d-pulley.dwg",
+          "bytes": 339630,
+          "sha256": "6002b39780e7c1c3980c885f319c1b03721aa8ae216ca3c16d3a619ebaa11ad6",
+          "tags": [
+            "3d-solids",
+            "known-2d-import-limitation"
+          ]
+        },
+        {
+          "path": "cad/trattocad/trattocad-sample-3d-pulley.dxf",
+          "bytes": 2378316,
+          "sha256": "ee156f0d02a2e051be014678eeee3366882030849ff3706b1275105383e4f4c2",
+          "tags": [
+            "3d-solids",
+            "known-2d-import-limitation"
+          ]
+        },
+        {
+          "path": "cad/trattocad/trattocad-sample-3d-house.dwg",
+          "bytes": 48744,
+          "sha256": "894d2c8b19000d39e2d1819ef9eacf87481dd3bb58718ec32bf4deb688a8150b",
+          "tags": [
+            "3d-solids",
+            "known-2d-import-limitation"
+          ]
+        },
+        {
+          "path": "cad/trattocad/trattocad-sample-3d-house.dxf",
+          "bytes": 334575,
+          "sha256": "703ec49ec6a26773ceb835fc062a7d942c6d0e36d031118572d59474599b7ff7",
+          "tags": [
+            "3d-solids",
+            "known-2d-import-limitation"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "cad-ezdxf",
+      "title": "ezdxf public examples and regression fixtures",
+      "source": "https://github.com/mozman/ezdxf/tree/c498560bb491c357deda538360ed0c8fdb11f5a7",
+      "notes": "Pinned upstream commit. Repository software license is MIT; individual sample provenance may differ. Original samples are downloaded locally only. Includes deliberately problematic and 3D inputs.",
+      "license": {
+        "spdx": null,
+        "status": "MIT repository; sample-specific rights not independently verified"
+      },
+      "files": [
+        {
+          "path": "cad/ezdxf/docs/source/tutorials/src/geo/Graz_10km_3m.dxf",
+          "bytes": 920747,
+          "sha256": "411eb5783697bd821b2b55f4dea13bc8e7f315922b9891c69fe320e29f9cdd9b",
+          "url": "https://raw.githubusercontent.com/mozman/ezdxf/c498560bb491c357deda538360ed0c8fdb11f5a7/docs/source/tutorials/src/geo/Graz_10km_3m.dxf"
+        },
+        {
+          "path": "cad/ezdxf/examples/edgeminer/3_us_main.dxf",
+          "bytes": 1809590,
+          "sha256": "ff424f11aca74246854b64e231d735b4ee4a1914e8fc81a9b59063fdcf7daf76",
+          "url": "https://raw.githubusercontent.com/mozman/ezdxf/c498560bb491c357deda538360ed0c8fdb11f5a7/examples/edgeminer/3_us_main.dxf"
+        },
+        {
+          "path": "cad/ezdxf/examples/edgeminer/4_world.dxf",
+          "bytes": 473056,
+          "sha256": "74ab2a9070f06e17ffd55d07c78c20e94a5e9b5fe8566f0bfaf9ba3b8aed6776",
+          "url": "https://raw.githubusercontent.com/mozman/ezdxf/c498560bb491c357deda538360ed0c8fdb11f5a7/examples/edgeminer/4_world.dxf"
+        },
+        {
+          "path": "cad/ezdxf/examples_dxf/hatches_2.dxf",
+          "bytes": 208793,
+          "sha256": "a50f02abbbafb0fedef5140e3f99691012bcffa192ecb298470fe8c5b2b9aad6",
+          "url": "https://raw.githubusercontent.com/mozman/ezdxf/c498560bb491c357deda538360ed0c8fdb11f5a7/examples_dxf/hatches_2.dxf"
+        },
+        {
+          "path": "cad/ezdxf/examples_dxf/text_fonts.dxf",
+          "bytes": 301744,
+          "sha256": "c69dbb759042ebdb3e23047e61f4053cfcd48d210ca846490d3c3ffc64d56ea1",
+          "url": "https://raw.githubusercontent.com/mozman/ezdxf/c498560bb491c357deda538360ed0c8fdb11f5a7/examples_dxf/text_fonts.dxf"
+        },
+        {
+          "path": "cad/ezdxf/examples_dxf/dimension_in_nested_blocks.dxf",
+          "bytes": 91234,
+          "sha256": "03b50bf9a29513147d2b66f6ec1a4377494ced38437082c979639dfa42d613ea",
+          "url": "https://raw.githubusercontent.com/mozman/ezdxf/c498560bb491c357deda538360ed0c8fdb11f5a7/examples_dxf/dimension_in_nested_blocks.dxf"
+        },
+        {
+          "path": "cad/ezdxf/examples_dxf/xclip.dxf",
+          "bytes": 94031,
+          "sha256": "cc1e5ffd5c88bd4b11f74324dc397a45f337471267a6458d5b8a2a213e6f7551",
+          "url": "https://raw.githubusercontent.com/mozman/ezdxf/c498560bb491c357deda538360ed0c8fdb11f5a7/examples_dxf/xclip.dxf"
+        },
+        {
+          "path": "cad/ezdxf/examples_dxf/uncommon.dxf",
+          "bytes": 343110,
+          "sha256": "5efdd671e3b6d8c45bd0688b1d6479d523f2290f0b390f1584348bf46e34c965",
+          "url": "https://raw.githubusercontent.com/mozman/ezdxf/c498560bb491c357deda538360ed0c8fdb11f5a7/examples_dxf/uncommon.dxf"
+        },
+        {
+          "path": "cad/ezdxf/integration_tests/data/bin_dxf_r2000.dxf",
+          "bytes": 11564,
+          "sha256": "bdbe44e042bc6f56fbf5bd4fde0053fa1b82dcf90305f21a521a7b70d2c37320",
+          "url": "https://raw.githubusercontent.com/mozman/ezdxf/c498560bb491c357deda538360ed0c8fdb11f5a7/integration_tests/data/bin_dxf_r2000.dxf"
+        },
+        {
+          "path": "cad/ezdxf/integration_tests/data/recover01.dxf",
+          "bytes": 182935,
+          "sha256": "02a47bc1e4263a2f4f9548eba919c5a95c22f6ebaeb10a69ac5ea94a4cfab2de",
+          "url": "https://raw.githubusercontent.com/mozman/ezdxf/c498560bb491c357deda538360ed0c8fdb11f5a7/integration_tests/data/recover01.dxf"
+        },
+        {
+          "path": "cad/ezdxf/examples_dxf/3dface.dxf",
+          "bytes": 133398,
+          "sha256": "c9447d342e267052354bede75028a934da35bd2bb1a96c1c084bdf7e5f0abc2a",
+          "url": "https://raw.githubusercontent.com/mozman/ezdxf/c498560bb491c357deda538360ed0c8fdb11f5a7/examples_dxf/3dface.dxf"
+        },
+        {
+          "path": "cad/ezdxf/examples/acistools/3dsolids.dxf",
+          "bytes": 161075,
+          "sha256": "8193d9917354a9165d500098aa31209218f0b3d6bf3b24632b89003295806c4d",
+          "url": "https://raw.githubusercontent.com/mozman/ezdxf/c498560bb491c357deda538360ed0c8fdb11f5a7/examples/acistools/3dsolids.dxf"
+        },
+        {
+          "path": "cad/ezdxf/docs/graphics/dim_linear_tutorial.dwg",
+          "bytes": 36391,
+          "sha256": "88037b595bd46d81c5c98ce7aa428ce6b8506d1aa4602e976811cfb154005155",
+          "url": "https://raw.githubusercontent.com/mozman/ezdxf/c498560bb491c357deda538360ed0c8fdb11f5a7/docs/graphics/dim_linear_tutorial.dwg"
+        },
+        {
+          "path": "cad/ezdxf/docs/graphics/dim_radial_tutorial.dwg",
+          "bytes": 64280,
+          "sha256": "1ee2e2d9ea37b87db1afc105b8315aca09813878c35b8cc9cff65f7acd60bb1c",
+          "url": "https://raw.githubusercontent.com/mozman/ezdxf/c498560bb491c357deda538360ed0c8fdb11f5a7/docs/graphics/dim_radial_tutorial.dwg"
+        },
+        {
+          "path": "cad/ezdxf/tests/test_08_addons/807_1.dwg",
+          "bytes": 506807,
+          "sha256": "5707f16f18013b0a163f2506128d8f8204377e39d2854ccf1382c0115017af53",
+          "url": "https://raw.githubusercontent.com/mozman/ezdxf/c498560bb491c357deda538360ed0c8fdb11f5a7/tests/test_08_addons/807_1.dwg"
+        }
+      ],
+      "models": [
+        {
+          "path": "cad/ezdxf/docs/source/tutorials/src/geo/Graz_10km_3m.dxf",
+          "bytes": 920747,
+          "sha256": "411eb5783697bd821b2b55f4dea13bc8e7f315922b9891c69fe320e29f9cdd9b",
+          "tags": [
+            "terrain",
+            "coordinates"
+          ]
+        },
+        {
+          "path": "cad/ezdxf/examples/edgeminer/3_us_main.dxf",
+          "bytes": 1809590,
+          "sha256": "ff424f11aca74246854b64e231d735b4ee4a1914e8fc81a9b59063fdcf7daf76",
+          "tags": [
+            "large-polyline"
+          ]
+        },
+        {
+          "path": "cad/ezdxf/examples/edgeminer/4_world.dxf",
+          "bytes": 473056,
+          "sha256": "74ab2a9070f06e17ffd55d07c78c20e94a5e9b5fe8566f0bfaf9ba3b8aed6776",
+          "tags": [
+            "map",
+            "polylines"
+          ]
+        },
+        {
+          "path": "cad/ezdxf/examples_dxf/hatches_2.dxf",
+          "bytes": 208793,
+          "sha256": "a50f02abbbafb0fedef5140e3f99691012bcffa192ecb298470fe8c5b2b9aad6",
+          "tags": [
+            "hatches"
+          ]
+        },
+        {
+          "path": "cad/ezdxf/examples_dxf/text_fonts.dxf",
+          "bytes": 301744,
+          "sha256": "c69dbb759042ebdb3e23047e61f4053cfcd48d210ca846490d3c3ffc64d56ea1",
+          "tags": [
+            "text",
+            "fonts"
+          ]
+        },
+        {
+          "path": "cad/ezdxf/examples_dxf/dimension_in_nested_blocks.dxf",
+          "bytes": 91234,
+          "sha256": "03b50bf9a29513147d2b66f6ec1a4377494ced38437082c979639dfa42d613ea",
+          "tags": [
+            "dimensions",
+            "nested-blocks"
+          ]
+        },
+        {
+          "path": "cad/ezdxf/examples_dxf/xclip.dxf",
+          "bytes": 94031,
+          "sha256": "cc1e5ffd5c88bd4b11f74324dc397a45f337471267a6458d5b8a2a213e6f7551",
+          "tags": [
+            "clipping"
+          ]
+        },
+        {
+          "path": "cad/ezdxf/examples_dxf/uncommon.dxf",
+          "bytes": 343110,
+          "sha256": "5efdd671e3b6d8c45bd0688b1d6479d523f2290f0b390f1584348bf46e34c965",
+          "tags": [
+            "uncommon-entities"
+          ]
+        },
+        {
+          "path": "cad/ezdxf/integration_tests/data/bin_dxf_r2000.dxf",
+          "bytes": 11564,
+          "sha256": "bdbe44e042bc6f56fbf5bd4fde0053fa1b82dcf90305f21a521a7b70d2c37320",
+          "tags": [
+            "binary-dxf"
+          ]
+        },
+        {
+          "path": "cad/ezdxf/integration_tests/data/recover01.dxf",
+          "bytes": 182935,
+          "sha256": "02a47bc1e4263a2f4f9548eba919c5a95c22f6ebaeb10a69ac5ea94a4cfab2de",
+          "tags": [
+            "recovery"
+          ]
+        },
+        {
+          "path": "cad/ezdxf/examples_dxf/3dface.dxf",
+          "bytes": 133398,
+          "sha256": "c9447d342e267052354bede75028a934da35bd2bb1a96c1c084bdf7e5f0abc2a",
+          "tags": [
+            "3d-faces",
+            "known-2d-import-limitation"
+          ]
+        },
+        {
+          "path": "cad/ezdxf/examples/acistools/3dsolids.dxf",
+          "bytes": 161075,
+          "sha256": "8193d9917354a9165d500098aa31209218f0b3d6bf3b24632b89003295806c4d",
+          "tags": [
+            "3d-solids",
+            "known-2d-import-limitation"
+          ]
+        },
+        {
+          "path": "cad/ezdxf/docs/graphics/dim_linear_tutorial.dwg",
+          "bytes": 36391,
+          "sha256": "88037b595bd46d81c5c98ce7aa428ce6b8506d1aa4602e976811cfb154005155",
+          "tags": [
+            "dimensions"
+          ]
+        },
+        {
+          "path": "cad/ezdxf/docs/graphics/dim_radial_tutorial.dwg",
+          "bytes": 64280,
+          "sha256": "1ee2e2d9ea37b87db1afc105b8315aca09813878c35b8cc9cff65f7acd60bb1c",
+          "tags": [
+            "dimensions",
+            "arcs"
+          ]
+        },
+        {
+          "path": "cad/ezdxf/tests/test_08_addons/807_1.dwg",
+          "bytes": 506807,
+          "sha256": "5707f16f18013b0a163f2506128d8f8204377e39d2854ccf1382c0115017af53",
+          "tags": [
+            "regression"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "cad-librecad",
+      "title": "LibreCAD DWG regression fixtures",
+      "source": "https://github.com/LibreCAD/LibreCAD/tree/c20884671c5f4566e7494890c5060569cc8d8330/librecad/src/lib/filters/tests/testdata",
+      "notes": "Pinned upstream commit. Software repository is GPL-2.0; individual test data provenance may differ. Local testing only; original files are not committed.",
+      "license": {
+        "spdx": null,
+        "status": "GPL-2.0 repository; sample-specific rights not independently verified"
+      },
+      "files": [
+        {
+          "path": "cad/librecad/lc_layer_flags_ac1012.dwg",
+          "bytes": 19776,
+          "sha256": "9a76043eff102f1ad3620b7c3f2d548fd9312ea43b6c5be16d6d684e4f3cbe3d",
+          "url": "https://raw.githubusercontent.com/LibreCAD/LibreCAD/c20884671c5f4566e7494890c5060569cc8d8330/librecad/src/lib/filters/tests/testdata/lc_layer_flags_ac1012.dwg"
+        },
+        {
+          "path": "cad/librecad/lc_layer_off_ac1014.dwg",
+          "bytes": 19730,
+          "sha256": "d9f68ca3ddcfef0c817616cd490ecf9a8da6e4750cfdb4cc4e7018e03995ae1a",
+          "url": "https://raw.githubusercontent.com/LibreCAD/LibreCAD/c20884671c5f4566e7494890c5060569cc8d8330/librecad/src/lib/filters/tests/testdata/lc_layer_off_ac1014.dwg"
+        },
+        {
+          "path": "cad/librecad/large_radial.dwg",
+          "bytes": 12632,
+          "sha256": "d3f7c22db4b6c3953e2d716da719d7e7e5b285cf73bd4e317f0a171d3859f98a",
+          "url": "https://raw.githubusercontent.com/LibreCAD/LibreCAD/c20884671c5f4566e7494890c5060569cc8d8330/librecad/src/lib/filters/tests/testdata/large_radial.dwg"
+        },
+        {
+          "path": "cad/librecad/hatch/oda_hatch_deg_def_ac1032.dwg",
+          "bytes": 12032,
+          "sha256": "5e5e168b393c5ac2f94add40fc30f1cf206b5c70851249caaebf17e98813569d",
+          "url": "https://raw.githubusercontent.com/LibreCAD/LibreCAD/c20884671c5f4566e7494890c5060569cc8d8330/librecad/src/lib/filters/tests/testdata/hatch/oda_hatch_deg_def_ac1032.dwg"
+        },
+        {
+          "path": "cad/librecad/mpolygon/oda_pattern_ac1015.dwg",
+          "bytes": 96002,
+          "sha256": "0ae4fd0805641a28172d9a17ab3bdb5df6eb10b6be2ad1bb1fdb5e395e4725e7",
+          "url": "https://raw.githubusercontent.com/LibreCAD/LibreCAD/c20884671c5f4566e7494890c5060569cc8d8330/librecad/src/lib/filters/tests/testdata/mpolygon/oda_pattern_ac1015.dwg"
+        },
+        {
+          "path": "cad/librecad/lc_multiline_attrib_ac1032.dwg",
+          "bytes": 12609,
+          "sha256": "f06218b4975c1ed2a9de0484a57744a4e5b5377ffe4520d6fb9098b8bd0dac11",
+          "url": "https://raw.githubusercontent.com/LibreCAD/LibreCAD/c20884671c5f4566e7494890c5060569cc8d8330/librecad/src/lib/filters/tests/testdata/lc_multiline_attrib_ac1032.dwg"
+        }
+      ],
+      "models": [
+        {
+          "path": "cad/librecad/lc_layer_flags_ac1012.dwg",
+          "bytes": 19776,
+          "sha256": "9a76043eff102f1ad3620b7c3f2d548fd9312ea43b6c5be16d6d684e4f3cbe3d",
+          "tags": [
+            "r13",
+            "layers"
+          ]
+        },
+        {
+          "path": "cad/librecad/lc_layer_off_ac1014.dwg",
+          "bytes": 19730,
+          "sha256": "d9f68ca3ddcfef0c817616cd490ecf9a8da6e4750cfdb4cc4e7018e03995ae1a",
+          "tags": [
+            "r14",
+            "visibility"
+          ]
+        },
+        {
+          "path": "cad/librecad/large_radial.dwg",
+          "bytes": 12632,
+          "sha256": "d3f7c22db4b6c3953e2d716da719d7e7e5b285cf73bd4e317f0a171d3859f98a",
+          "tags": [
+            "dimensions",
+            "arcs"
+          ]
+        },
+        {
+          "path": "cad/librecad/hatch/oda_hatch_deg_def_ac1032.dwg",
+          "bytes": 12032,
+          "sha256": "5e5e168b393c5ac2f94add40fc30f1cf206b5c70851249caaebf17e98813569d",
+          "tags": [
+            "r2018",
+            "hatches"
+          ]
+        },
+        {
+          "path": "cad/librecad/mpolygon/oda_pattern_ac1015.dwg",
+          "bytes": 96002,
+          "sha256": "0ae4fd0805641a28172d9a17ab3bdb5df6eb10b6be2ad1bb1fdb5e395e4725e7",
+          "tags": [
+            "r2000",
+            "mpolygon"
+          ]
+        },
+        {
+          "path": "cad/librecad/lc_multiline_attrib_ac1032.dwg",
+          "bytes": 12609,
+          "sha256": "f06218b4975c1ed2a9de0484a57744a4e5b5377ffe4520d6fb9098b8bd0dac11",
+          "tags": [
+            "r2018",
+            "attributes"
+          ]
+        }
+      ]
+    }
+  ]
+}

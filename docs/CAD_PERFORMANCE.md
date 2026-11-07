@@ -47,6 +47,8 @@ The 10,000-line native reader itself took about 9 ms; fresh GPU/process startup 
 
 ## Correctness checks
 
+The [public DXF/DWG corpus](CAD_CORPUS.md) adds real architectural, mechanical, civil, text-heavy, and format-edge samples. Its initial screen exposes substantially slower complex drawings and unsupported content; generated line benchmarks alone do not represent those workloads.
+
 Native/ezdxf comparison tests cover colors, hidden layers, bounds, curved polylines, entity handles, batched pixel picking, and whole-drawing fallback for text. Binary transport tests compare decoded positions/metadata against the JSON bridge and reject truncated/trailing data. Existing model rendering, geometry queries, units, measurements, DXF/DWG bridge, and GPU tests remain applicable.
 
 ```sh

@@ -53,15 +53,18 @@ def extract(root, record):
 
 
 def main():
-    manifest = Path(__file__).with_name("benchmark_models.json")
-    datasets = {
-        item["id"]: item
-        for item in json.loads(manifest.read_text(encoding="utf-8"))["datasets"]
-    }
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("models", nargs="*", help="Model IDs from the list shown with no arguments")
-    parser.add_argument("--directory", type=Path, default=manifest.parent / ".benchmark-models")
+    parser.add_argument("--manifest", type=Path, default=Path(__file__).with_name("benchmark_models.json"))
+    parser.add_argument("--all", action="store_true", help="Download every dataset in the manifest")
+    parser.add_argument("--directory", type=Path, default=Path(__file__).parent / ".benchmark-models")
     args = parser.parse_args()
+    datasets = {
+        item["id"]: item
+        for item in json.loads(args.manifest.read_text(encoding="utf-8"))["datasets"]
+    }
+    if args.all:
+        args.models = list(datasets)
     if not args.models:
         for key, item in datasets.items():
             size = sum(file["bytes"] for file in item["files"]) / 1_000_000

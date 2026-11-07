@@ -37,6 +37,8 @@ Units are detected for STEP, glTF, 3MF, and drawing headers with explicit proven
 
 For DXF/DWG, see [drawing load benchmarks and profiling](docs/CAD_PERFORMANCE.md). Common ASCII linework uses a native path; complex content falls back to the full drawing frontend.
 
+The [public CAD test corpus](docs/CAD_CORPUS.md) provides 38 checksum-verified online DXF/DWG samples and a runner that saves previews, timing, warnings, and failures.
+
 ## Performance
 
 Same PC, same file, warm cache; median geometry-import times. These exclude app startup and rendering.
