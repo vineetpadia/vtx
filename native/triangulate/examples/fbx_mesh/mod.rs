@@ -1,5 +1,7 @@
 use std::{error::Error, path::Path, time::Instant};
 
+mod loader;
+
 #[cfg(feature = "desktop")]
 pub mod appearance;
 
@@ -80,13 +82,7 @@ fn decode(mesh: &ufbx::Mesh) -> Result<Mesh> {
 
 pub fn load(path: &Path) -> Result<SceneMesh> {
     let start = Instant::now();
-    let path = path.to_str().ok_or("FBX path is not Unicode")?;
-    let scene = ufbx::load_file(path, ufbx::LoadOpts {
-        ignore_animation: true,
-        ignore_embedded: true,
-        load_external_files: false,
-        ..Default::default()
-    }).map_err(|error| format!("FBX import: {}", error.description))?;
+    let scene = loader::load(path, true)?;
     let parsed = start.elapsed();
     let mut result = SceneMesh {
         meshes: (0..scene.meshes.len()).map(|_| None).collect(),

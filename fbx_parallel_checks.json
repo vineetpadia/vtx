@@ -1,0 +1,84 @@
+{
+  "conditions": "Windows Core i9-12900K, RTX 3080 Ti, Vulkan, warm OS file cache; 12 alternating fresh processes per build",
+  "model": "Poly Haven Pine Tree 01 FBX, 648483964 bytes",
+  "triangle_count": 17182252,
+  "ordered_geometry_sha256": "0919ce7ae376874b28ff11ef5a6cd744d89d0b1efeab1ad81c86d499d10d2ecb",
+  "geometry_check": "Same compare build, VTX_FBX_THREADS=1 versus 8; exact ordered float32 triangle bytes, no normalization",
+  "render_cases": [
+    {
+      "model": "pine_tree_01_1k.fbx",
+      "png_sha256": "7316fd5233ac172d5b322ebda59a956fc31d1af37768ed932a185589d2de4417"
+    },
+    {
+      "model": "grid-40.fbx",
+      "png_sha256": "98695c7c25d6fdd8354fb7c4c11838e19086ab2aa8811cdf0b2d21617e231c60"
+    },
+    {
+      "model": "blender_293_embedded_textures_7400_binary.fbx",
+      "png_sha256": "ff66ee0756de17fa0e71d859668cbb802d0a2b7b2a5cf8a38a5021757fa639e7"
+    },
+    {
+      "model": "max_instanced_material_7700_binary.fbx",
+      "png_sha256": "3db2adcf1a2bea42241c30c6b34364bbf208d2923578be978710647ea0b1dfd3"
+    },
+    {
+      "model": "textured.fbx",
+      "png_sha256": "2b5e208e95fa69e75c9322d574e8a2066acce1063c384b35510c3a2a37ce0d5e"
+    },
+    {
+      "model": "textured-padded.fbx",
+      "png_sha256": "2b5e208e95fa69e75c9322d574e8a2066acce1063c384b35510c3a2a37ce0d5e"
+    },
+    {
+      "model": "texture-instanced.fbx",
+      "png_sha256": "1e6ca022d812e4cdf0711c08cdb7078b4228d525cb7829bed52b9da62210d0ee"
+    },
+    {
+      "model": "texture-instanced-padded.fbx",
+      "png_sha256": "1e6ca022d812e4cdf0711c08cdb7078b4228d525cb7829bed52b9da62210d0ee"
+    },
+    {
+      "model": "material-overrides.fbx",
+      "png_sha256": "2f71c94a7c4e1ede5c8bb5e34a2f70a179b313c68b224228040c95f754777ef8"
+    },
+    {
+      "model": "material-overrides-padded.fbx",
+      "png_sha256": "2f71c94a7c4e1ede5c8bb5e34a2f70a179b313c68b224228040c95f754777ef8"
+    },
+    {
+      "model": "multi-material.fbx",
+      "png_sha256": "7da2b8334655bab7f651a788688a4f8581bca81216fa2129d91d529669905bee"
+    },
+    {
+      "model": "multi-material-padded.fbx",
+      "png_sha256": "7da2b8334655bab7f651a788688a4f8581bca81216fa2129d91d529669905bee"
+    },
+    {
+      "model": "texture-baked.fbx",
+      "png_sha256": "1e6ca022d812e4cdf0711c08cdb7078b4228d525cb7829bed52b9da62210d0ee"
+    },
+    {
+      "model": "texture-baked-padded.fbx",
+      "png_sha256": "1e6ca022d812e4cdf0711c08cdb7078b4228d525cb7829bed52b9da62210d0ee"
+    },
+    {
+      "model": "missing-texture.fbx",
+      "png_sha256": "ea59fb317cc7bb86eeb7a729705158d9a1ce9cc801bbeb7785bd843762f193e3"
+    },
+    {
+      "model": "missing-texture-padded.fbx",
+      "png_sha256": "ea59fb317cc7bb86eeb7a729705158d9a1ce9cc801bbeb7785bd843762f193e3"
+    }
+  ],
+  "known_appearance_issues": "Pine Tree retains three texture warnings and white foliage in both builds",
+  "malformed_input_check": "Truncated 64 MiB prefix of Pine Tree rejected with Bad DEFLATE data in serial and parallel modes; parallel failure retries serially",
+  "worker_count_probe": [
+    "threads=0 parse_ms=2808.319 scene_bytes=2270490512 temp_bytes=99608 meshes=3 peak_commit_mib=2170.6 peak_ws_mib=2170.0",
+    "threads=2 parse_ms=1938.650 scene_bytes=2270490512 temp_bytes=768708152 meshes=3 peak_commit_mib=2905.2 peak_ws_mib=2902.3",
+    "threads=4 parse_ms=1291.503 scene_bytes=2270490512 temp_bytes=768708152 meshes=3 peak_commit_mib=2905.3 peak_ws_mib=2902.4",
+    "threads=8 parse_ms=1194.489 scene_bytes=2270490512 temp_bytes=768708152 meshes=3 peak_commit_mib=2905.6 peak_ws_mib=2902.6",
+    "threads=0 parse_ms=2821.505 scene_bytes=2270490512 temp_bytes=99608 meshes=3 peak_commit_mib=2170.6 peak_ws_mib=2169.2"
+  ],
+  "before_executable_sha256": "666b7330c814c300cc6d9fcb4b1720992fd5a665484bd72e9723c636c305228e",
+  "after_executable_sha256": "1fabf5b285e40f5d91f9f73a944f9f96d8159bb55739d7814449c8a721e27f81"
+}

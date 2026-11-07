@@ -1,5 +1,7 @@
 Native VTX desktop preview for Windows, macOS, and Linux.
 
+This update accelerates large FBX imports with a bounded worker pool and preserves serial error diagnostics. The packages include an original colored cube (`demo.glb`) and offline testing instructions (`TESTING.txt`), so you can send the archive directly to a tester without GitHub access.
+
 Download the archive for your computer, extract it, and open **VTX.exe**, **VTX.app**, or **VTX**. No Rust or Python installation is required. On Mac, drag the app into Applications. [Installation help](https://github.com/vineetpadia/vtx/blob/main/docs/INSTALL.md).
 
 | Computer | Download |

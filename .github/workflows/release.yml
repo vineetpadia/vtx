@@ -8,7 +8,7 @@ on:
       version:
         description: 'Release version (for example v0.1.0)'
         required: true
-        default: 'v0.1.0'
+        default: 'v0.1.1'
 
 permissions:
   contents: read
@@ -55,10 +55,20 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libxkbcommon-dev libwayland-dev libvulkan-dev
       - name: Set up Rust
+        id: rust
         run: |
           rustup toolchain install stable --profile minimal --no-self-update
           rustup default stable
           rustup target add '${{ matrix.target }}'
+          echo "version=$(rustc -V)" >> "$GITHUB_OUTPUT"
+      - name: Cache Rust dependencies and build output
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git/db
+            native/target
+          key: vtx-${{ runner.os }}-${{ matrix.target }}-${{ steps.rust.outputs.version }}-${{ hashFiles('native/Cargo.lock') }}
       - name: Include the Windows C runtime
         if: runner.os == 'Windows'
         run: echo 'RUSTFLAGS=-C target-feature=+crt-static' >> "$GITHUB_ENV"
@@ -103,5 +113,10 @@ jobs:
           if ! gh release view "$RELEASE_VERSION" >/dev/null 2>&1; then
             gh release create "$RELEASE_VERSION" --target "$GITHUB_SHA" \
               --title "VTX $RELEASE_VERSION" --notes-file docs/RELEASE_NOTES.md --latest
+          fi
+          release_sha=$(gh api "repos/$GITHUB_REPOSITORY/commits/$RELEASE_VERSION" --jq '.sha')
+          if [ "$release_sha" != "$GITHUB_SHA" ]; then
+            echo 'This version already points to a different commit; choose a new version.' >&2
+            exit 1
           fi
           gh release upload "$RELEASE_VERSION" dist/* --clobber

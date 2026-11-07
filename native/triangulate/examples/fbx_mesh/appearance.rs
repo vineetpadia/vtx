@@ -65,16 +65,7 @@ pub fn with_surfaces(
     mut emit: impl FnMut(Surface<'_>) -> Result<()>,
 ) -> Result<usize> {
     let start = Instant::now();
-    let source = path.to_str().ok_or("FBX path is not Unicode")?;
-    let scene = ufbx::load_file(
-        source,
-        ufbx::LoadOpts {
-            ignore_animation: true,
-            load_external_files: false,
-            ..Default::default()
-        },
-    )
-    .map_err(|error| format!("FBX import: {}", error.description))?;
+    let scene = super::loader::load(path, false)?;
     let parsed = start.elapsed();
     let mut topology = (0..scene.meshes.len()).map(|_| None).collect::<Vec<_>>();
     let mut indices = HashMap::new();

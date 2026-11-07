@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 import plistlib
 import shutil
+import struct
 import subprocess
 import tarfile
 import tempfile
@@ -13,6 +14,46 @@ import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
 PLATFORMS = ("windows-x64", "linux-x64", "macos-arm64", "macos-x64")
+
+
+def demo_model(destination):
+    """Write an original, self-contained colored cube for a quick render check."""
+    faces = [
+        [(1, -1, -1), (1, 1, -1), (1, 1, 1), (1, -1, 1)],
+        [(-1, -1, 1), (-1, 1, 1), (-1, 1, -1), (-1, -1, -1)],
+        [(-1, 1, -1), (-1, 1, 1), (1, 1, 1), (1, 1, -1)],
+        [(-1, -1, 1), (-1, -1, -1), (1, -1, -1), (1, -1, 1)],
+        [(1, -1, 1), (1, 1, 1), (-1, 1, 1), (-1, -1, 1)],
+        [(-1, -1, -1), (-1, 1, -1), (1, 1, -1), (1, -1, -1)],
+    ]
+    colors = [(0.95, 0.15, 0.1), (0.1, 0.4, 0.95), (0.15, 0.8, 0.25),
+              (0.9, 0.65, 0.1), (0.6, 0.15, 0.85), (0.05, 0.8, 0.85)]
+    data, views, accessors, primitives = bytearray(), [], [], []
+    for face_id, points in enumerate(faces):
+        offset = len(data)
+        data.extend(struct.pack("<12f6H", *(axis for point in points for axis in point),
+                                0, 1, 2, 0, 2, 3))
+        views.extend([dict(buffer=0, byteOffset=offset, byteLength=48, target=34962),
+                      dict(buffer=0, byteOffset=offset + 48, byteLength=12, target=34963)])
+        accessors.extend([
+            dict(bufferView=face_id * 2, componentType=5126, count=4, type="VEC3",
+                 min=[min(point[axis] for point in points) for axis in range(3)],
+                 max=[max(point[axis] for point in points) for axis in range(3)]),
+            dict(bufferView=face_id * 2 + 1, componentType=5123, count=6, type="SCALAR"),
+        ])
+        primitives.append(dict(attributes={"POSITION": face_id * 2},
+                               indices=face_id * 2 + 1, material=face_id))
+    document = dict(asset=dict(version="2.0", generator="VTX demo"), scene=0,
+                    scenes=[dict(nodes=[0])], nodes=[dict(mesh=0)],
+                    meshes=[dict(primitives=primitives)],
+                    materials=[dict(pbrMetallicRoughness=dict(baseColorFactor=[*color, 1],
+                                    metallicFactor=0, roughnessFactor=0.6)) for color in colors],
+                    buffers=[dict(byteLength=len(data))], bufferViews=views, accessors=accessors)
+    metadata = json.dumps(document, separators=(",", ":")).encode("utf-8")
+    metadata += b" " * (-len(metadata) % 4)
+    destination.write_bytes(struct.pack("<III", 0x46546C67, 2, 28 + len(metadata) + len(data))
+                            + struct.pack("<II", len(metadata), 0x4E4F534A) + metadata
+                            + struct.pack("<II", len(data), 0x004E4942) + data)
 
 
 def notices(destination, metadata):
@@ -72,6 +113,8 @@ def main():
         stage = Path(temporary)
         package = stage / name
         package.mkdir()
+        demo_model(package / "demo.glb")
+        shutil.copy2(ROOT / "docs/TESTING.txt", package / "TESTING.txt")
         if args.platform.startswith("macos"):
             app = package / "VTX.app"
             contents = app / "Contents"
@@ -107,6 +150,8 @@ def main():
             "Drop a model into the window, or press Ctrl+O (Command+O on Mac).\n"
             "Drag to orbit, scroll to zoom, R to reset the camera.\n"
             "Keep OBJ/MTL textures and glTF companion files beside their model.\n\n"
+            "Try the included demo.glb colored cube. See TESTING.txt for offline\n"
+            "installation help, requirements, known limits, and feedback steps.\n\n"
             "Preview builds are unsigned. Installation help:\n"
             "https://github.com/vineetpadia/vtx/blob/main/docs/INSTALL.md\n\n"
             "Source and third-party notices:\n"

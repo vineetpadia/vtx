@@ -1,0 +1,49 @@
+VTX - test build
+
+GET STARTED
+Windows: extract the ZIP completely and double-click VTX.exe.
+Mac: unzip, drag VTX.app to Applications, and open it.
+Linux: extract the archive and open the executable named VTX.
+No Rust, Python, browser, or CAD application is required.
+
+Drop demo.glb into the VTX window, or press Ctrl+O (Command+O on Mac)
+and select it. You should see a cube with differently colored faces.
+Then try one of your own models. Keep its textures and companion files together.
+
+CONTROLS
+Drag with the left mouse button to orbit. Scroll to zoom.
+R resets the camera. Ctrl+O / Command+O opens another model.
+You can also drop another model into the window.
+
+FILES TO TRY
+STL, OBJ, PLY, glTF/GLB, FBX, STEP/STP, 3MF, IFC/IFCZIP,
+and SolidWorks SLDPRT/SLDASM files with saved display meshes.
+IGES requires an optional extension and is not included in this package.
+
+WHAT TO REPORT
+Your operating system and GPU; the file format and size;
+whether opening, orbiting, zooming, and opening a second file worked;
+any missing geometry, wrong colors, warnings, hangs, or crashes.
+A screenshot and the exact filename/steps help reproduce a problem.
+
+REQUIREMENTS AND FIRST LAUNCH
+Windows 10+ x64 with a Vulkan or Direct3D 12 capable GPU.
+macOS 12+; choose the Apple silicon or Intel download for your Mac.
+Linux x64 with glibc 2.35+ (Ubuntu 22.04+), X11/Wayland, and Vulkan.
+The Linux file chooser uses the desktop's XDG portal.
+
+This preview is unsigned on Windows and not notarized on Mac.
+Windows may show an unknown-publisher prompt. Check the source before
+choosing More info > Run anyway, if your policy allows it.
+If macOS blocks the first launch, try opening the app once, then use
+System Settings > Privacy & Security > Open Anyway.
+
+KNOWN LIMITS
+Some STEP surfaces fail tessellation; the title reports import warnings.
+Animation, deformers, and advanced material effects are incomplete.
+Some FBX texture paths and layered materials are unsupported.
+SolidWorks uses saved display meshes rather than reconstructing CAD geometry.
+
+The licenses folder contains dependency attribution and license texts.
+On Mac it is inside VTX.app/Contents/Resources.
+This archive can be shared directly; the recipient does not need GitHub access.

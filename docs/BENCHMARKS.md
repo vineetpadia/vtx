@@ -264,6 +264,23 @@ The comparison uses Chrome on the RTX 3080 Ti. It times the load after file choi
 
 The native FBX importer uses ufbx for binary and ASCII files. The standalone viewer displays opaque base colors and base-color textures from embedded PNG/JPEG images or companion images inside the model folder. It uses face material slots and per-node material assignments, and preserves UV seams, named UV sets, and texture transforms. A mesh with the same material assignment shares GPU geometry across placements. Animation playback, deformers, and layered textures are outside this path. [ufbx mesh and material reference](https://ufbx.github.io/elements/meshes/)
 
+Debugger stack samples on Poly Haven's 648 MB Pine Tree FBX repeatedly reached `ufbxi_inflate_block_fast`. VTX now supplies a bounded worker pool through [ufbx's task interface](https://ufbx.github.io/reference). Files smaller than 4 MiB use the serial path. Larger files use up to eight workers, capped by available processors; `VTX_FBX_THREADS=1` selects serial loading. Failed threaded imports retry serially to preserve coverage and useful decoder diagnostics.
+
+The following medians use 12 alternating fresh processes per build on the Core i9-12900K and RTX 3080 Ti, Vulkan, and a warm OS file cache. First frame includes GPU initialization, import, upload, and completion of a 768 × 512 render. [Individual trials](../fbx_parallel_benchmark.csv) · [Verification](../fbx_parallel_checks.json)
+
+| Model and measurement | Previous VTX | Parallel FBX loading |
+|---|---:|---:|
+| Pine Tree, 17.18M triangles: first frame | 4,519.26 ms | 2,334.04 ms |
+| Pine Tree: FBX read and parse | 2,813.34 ms | 1,247.65 ms |
+| Pine Tree: peak process commit | 4,003.47 MiB | 4,003.78 MiB |
+| Pine Tree: peak working set | 3,306.57 MiB | 3,168.60 MiB |
+| Pine Tree: process CPU time | 4,500.00 ms | 4,187.50 ms |
+| Instanced FBX, 5M triangles: first frame | 136.94 ms | 136.87 ms |
+
+The Pine Tree first-frame speedup is 1.94×. Sixteen render cases matched byte for byte, including padded ASCII fixtures that exercise the larger-file path. Serial and parallel geometry exports matched all 17,182,252 ordered triangles exactly. Both viewers retain Pine Tree's three texture warnings and white foliage. Parallel parsing uses additional temporary buffers: parser-only peak commit rose from about 2,171 to 2,906 MiB in the worker-count probe, while the full viewer's later allocation peak stayed essentially unchanged.
+
+Reproduce first-frame comparisons with `python benchmark_viewer.py BEFORE_EXE AFTER_EXE MODEL --runs 12 --backend vulkan --warm-cache --verify-images --csv results.csv`. To isolate thread settings within one build, pass the same executable twice and add `--before-fbx-threads 1 --after-fbx-threads 8`. Image verification is an additional untimed pass; the harness also checks triangle, point, and warning counts in every timed process. Full-coordinate export checks are recorded separately in the verification JSON.
+
 On a geometry-only FBX with 40 placements and five million triangles, sharing vertex and index buffers reduced their combined upload from 90.2 MB to 2.3 MB. Median file open through the first completed Vulkan frame after GPU initialization fell from 28.4 ms to 8.2 ms. CPU-side upload work fell from 10.9 ms to 0.34 ms, and peak process commit fell from 316 MiB to 200 MiB. Both builds used the same file and RTX 3080 Ti across 12 alternating fresh processes per build with a warm file cache. The rendered frames and all five million ordered triangles matched byte for byte. On the Blender instancing fixture, float32 GPU placement coordinates differed from the double-precision CPU reference by at most 0.00000024 model units.
 
 The packed VTX output matched a direct C ufbx reference byte for byte across five official fixtures with polygons, instances, and geometry transforms. The eight-instance Suzanne fixture produced 7,744 triangles. Its indexed output used 141,600 payload bytes versus 278,784 bytes as packed triangles. VTX's native file-and-parse probe reported a 0.43 ms median across 12 fresh-process runs on this fixture with a warm OS cache. On the Barbarian fixture, disabling animation and embedded-content loading reduced ufbx's reported temporary allocations from 329,454 to 256,096 bytes with the same triangle output. That compares loader settings within ufbx.
