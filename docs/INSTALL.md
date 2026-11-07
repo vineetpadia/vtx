@@ -6,6 +6,8 @@
 
 Download **vtx-windows-x64.zip**, choose **Extract all**, then double-click **VTX.exe** in the extracted folder. Keep the extracted files together. You can move that folder anywhere; no installer or administrator access is required.
 
+Requires Windows 10 or newer with a Vulkan or Direct3D 12 capable GPU.
+
 Preview builds are unsigned. Windows may show an unknown-publisher prompt. Check that the download came from this repository before choosing **More info → Run anyway**, if your Windows policy allows it.
 
 ## macOS

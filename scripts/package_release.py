@@ -22,9 +22,12 @@ def notices(destination, metadata):
         shutil.copy2(ROOT / "native" / name, destination / name)
     shutil.copy2(ROOT / "vendor/sldprt/LICENSE", destination / "sldprt-export-LICENSE")
     shutil.copy2(ROOT / "vendor/sldprt/NOTICE.md", destination / "sldprt-export-NOTICE.md")
+    shutil.copy2(ROOT / "native/meshopt_decode/LICENSE", destination / "meshoptimizer-LICENSE")
     entries = ["VTX third-party software notices", "",
                "VTX's STEP core derives from Formlabs Foxtrot (MIT OR Apache-2.0).",
                "SolidWorks reader layouts derive from XRTC5/sldprt-export (MIT).", ""]
+    entries.extend(("meshoptimizer 1.3 by Arseny Kapoulkine (MIT).",
+                    "Source: https://github.com/zeux/meshoptimizer/tree/v1.3", ""))
     data = json.loads(metadata.read_text(encoding="utf-8"))
     for package in sorted(data["packages"], key=lambda item: (item["name"], item["version"])):
         if package.get("source") is None:
