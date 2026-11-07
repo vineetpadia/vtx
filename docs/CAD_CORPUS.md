@@ -26,11 +26,39 @@ python3 scripts/test_cad_corpus.py --output dist/cad-corpus
 # Repeat a subset in a separate, new output folder.
 python3 scripts/test_cad_corpus.py --dataset cad-autodesk --runs 3 \
   --timeout 60 --output dist/cad-corpus-autodesk-repeat
+
+# Measure repeat opens with an isolated geometry cache.
+python3 scripts/test_cad_corpus.py --dataset cad-autodesk --runs 3 \
+  --cache reuse --output dist/cad-corpus-autodesk-cached
+
+# Isolate one workload: first run misses, three subsequent runs can hit.
+python3 scripts/test_cad_corpus.py --model home_floor_plan.dwg --runs 4 \
+  --cache reuse --output dist/cad-corpus-home-cached
 ```
 
 The runner verifies every input checksum, uses fresh VTX processes, and saves `results.json` after each input. Each run retains stderr, output artifacts, import warnings, geometry counts, units, reader choice, and load/conversion timing. A timeout stops the process group on POSIX, including converter/bridge children. Missing files, invalid JSON, failures, and timeouts produce a nonzero final exit status without discarding earlier results. Use a new/empty output directory to preserve prior evidence.
 
-Timing is **complete `--inspect --views plan --size 512` export wall time**, including startup, import, GPU initialization, PNG/JSON output, and shutdown. It is not the `--check` first-frame metric in [CAD_PERFORMANCE.md](CAD_PERFORMANCE.md), nor desktop input-to-display latency. OS file and driver caches may be warm; there is no VTX parsed-geometry cache.
+Timing is **complete `--inspect --views plan --size 512` export wall time**, including startup, import, GPU initialization, PNG/JSON output, and shutdown. It is not the `--check` first-frame metric in [CAD_PERFORMANCE.md](CAD_PERFORMANCE.md), nor desktop input-to-display latency. OS file and driver caches may be warm. The runner disables VTX geometry caching by default. Explicit `--cache reuse` uses an isolated cache under the new output directory; the first run is a miss and subsequent runs can hit. Each run records the actual cache status and import timings.
+
+## Follow-up implementation: November 7, 2026
+
+The updated implementation exported **34/38 inputs**, compared with 29/38 initially. The run explicitly disabled geometry caching, used one fresh `--inspect --views plan --size 512` process per input, and retained the same 30-second timeout. Twenty-one exported files reported warnings; no timeout occurred. Export counts include partial geometry and must not be interpreted as complete-import counts.
+
+Newly exported inputs:
+
+| Input | Result |
+|---|---|
+| TrattoCAD house DXF | All 48 planar ACIS entities, 952 triangles, no reported import issues; preserves XYZ |
+| TrattoCAD house DWG | 43 planar ACIS entities; five entities omitted after conversion, with warnings |
+| TrattoCAD pulley DXF | Two planar entities; five unsupported curved entities omitted with warnings |
+| ezdxf `3dsolids.dxf` | Two supported planar entities; two unsupported curved entities omitted with warnings |
+| ezdxf `recover01.dxf` | 1,459 displayed entity groups after disclosed structural recovery; auditor reported 68 fixes |
+
+Four inputs still fail: Autodesk `pumping_station.dwg` (recovery finds no modelspace geometry in damaged conversion output), TrattoCAD pulley DWG (unsupported curves and converted ACIS parsing failures), LibreCAD `large_radial.dwg`, and LibreCAD `oda_pattern_ac1015.dwg` (empty modelspace output from the current converter). Fatal errors now retain the converter diagnostics. The source drawings are unchanged.
+
+Drawings with accepted ACIS geometry default to seven upright Z-up views; the corpus runner deliberately requests plan for consistency. Normal 2D entities remain projected onto XY. [Drawing limitations and cache behavior](DRAWINGS.md) describe the supported subset. Full ACIS curved surfaces, broader DWG converter support, paperspace and external-reference resolution remain significant gaps.
+
+The [uncached performance follow-up](CAD_PERFORMANCE.md#real-drawing-follow-up) separately measures cold geometry imports. Use `--cache reuse` to measure repeat opens; `median_wall_ms_by_cache_status` separates cache-hit and cache-miss medians rather than treating them as the same operation.
 
 ## Initial screening: November 7, 2026
 

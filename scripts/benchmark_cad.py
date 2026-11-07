@@ -29,7 +29,7 @@ def main():
             for name in (['before','after'] if index%2==0 else ['after','before']):
                 binary=getattr(args,name).resolve()
                 start=time.perf_counter_ns()
-                process=subprocess.run([str(binary),'--check',str(model.resolve())],capture_output=True,text=True,timeout=180)
+                process=subprocess.run([str(binary),'--check',str(model.resolve())],capture_output=True,text=True,timeout=180,env=dict(os.environ,VTX_CAD_CACHE='0'))
                 elapsed=(time.perf_counter_ns()-start)/1e6
                 if process.returncode:
                     raise RuntimeError(f'{name} failed on {model}: {process.stderr}')

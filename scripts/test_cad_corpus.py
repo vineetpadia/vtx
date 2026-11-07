@@ -6,8 +6,10 @@ Successful imports still require visual review; warnings can indicate missing co
 """
 
 import argparse
+from collections import defaultdict
 from datetime import datetime, timezone
 import hashlib
+from fnmatch import fnmatch
 import json
 import os
 from pathlib import Path
@@ -22,11 +24,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from fetch_benchmark_models import local_path, matches
 
 
-def execute(command, timeout):
+def execute(command, timeout, env=None):
     start = time.perf_counter()
     process = subprocess.Popen(
         command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, errors="replace",
         start_new_session=os.name == "posix",
+        env=env,
     )
     timed_out = False
     try:
@@ -58,8 +61,11 @@ def main():
     parser.add_argument("--binary", type=Path, default=root / "native/target/release/examples/vtx")
     parser.add_argument("--output", type=Path, default=root / "dist/cad-corpus")
     parser.add_argument("--dataset", action="append", help="Select a dataset ID; repeat as needed")
+    parser.add_argument("--model", action="append", help="Select a filename or relative-path glob; repeat as needed")
     parser.add_argument("--runs", type=int, default=1)
     parser.add_argument("--timeout", type=float, default=60)
+    parser.add_argument("--cache", choices=("disabled", "reuse"), default="disabled",
+                        help="Disable geometry caching, or reuse an isolated cache inside the output folder")
     args = parser.parse_args()
     if args.runs < 1 or args.timeout <= 0:
         parser.error("--runs and --timeout must be positive")
@@ -67,6 +73,11 @@ def main():
     known = {dataset["id"] for dataset in datasets}
     if set(args.dataset or []) - known:
         parser.error("Unknown dataset ID")
+    datasets = [dict(d, models=[m for m in d["models"] if not args.model or any(
+        fnmatch(m["path"], pattern) or fnmatch(Path(m["path"]).name, pattern) for pattern in args.model
+    )]) for d in datasets if not args.dataset or d["id"] in args.dataset]
+    if not any(d["models"] for d in datasets):
+        parser.error("No models match the selection")
     if args.output.exists() and any(args.output.iterdir()):
         parser.error("--output must be new or empty so previous results are preserved")
     binary = args.binary.resolve(strict=True)
@@ -75,13 +86,16 @@ def main():
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "system": platform.platform(), "binary": str(binary),
         "manifest": str(args.manifest.resolve()),
-        "method": "Fresh processes, --inspect --views plan --size 512, including import, GPU startup, PNG and JSON export, and shutdown. OS caches may be warm. No VTX geometry cache. Not --check or desktop latency. Loaded does not establish visual completeness.",
+        "method": "Fresh processes, --inspect --views plan --size 512, including import, GPU startup, PNG and JSON export, and shutdown. OS caches may be warm. Not --check or desktop latency. Loaded does not establish visual completeness.",
+        "geometry_cache": args.cache,
         "results": [],
     }
     with binary.open("rb") as source:
         report["binary_sha256"] = hashlib.file_digest(source, "sha256").hexdigest()
     report["manifest_sha256"] = hashlib.sha256(args.manifest.read_bytes()).hexdigest()
     output = args.output.resolve()
+    environment = dict(os.environ, VTX_CAD_CACHE="0" if args.cache == "disabled" else "1",
+                       VTX_CAD_CACHE_DIR=str(output / "geometry-cache"))
     for dataset in datasets:
         if args.dataset and dataset["id"] not in args.dataset:
             continue
@@ -97,7 +111,7 @@ def main():
                     result, stdout = execute([
                         str(binary), "--inspect", str(source.resolve()),
                         "--output", str(folder), "--views", "plan", "--size", "512",
-                    ], args.timeout)
+                    ], args.timeout, environment)
                     result["artifacts"] = str(folder.relative_to(output))
                     if result["status"] == "loaded":
                         try:
@@ -114,6 +128,10 @@ def main():
                 record["status"] = record["runs"][-1]["status"]
                 if record["status"] == "loaded":
                     record["median_inspect_wall_ms"] = statistics.median(r["wall_ms"] for r in record["runs"])
+                    by_cache = defaultdict(list)
+                    for r in record["runs"]:
+                        by_cache[r["source_info"].get("cache", {}).get("status", "unreported")].append(r["wall_ms"])
+                    record["median_wall_ms_by_cache_status"] = {status: statistics.median(values) for status, values in by_cache.items()}
                     record["has_import_warnings"] = any(
                         r["geometry"].get("import_issues", 0) or r["source_info"].get("warnings")
                         for r in record["runs"]

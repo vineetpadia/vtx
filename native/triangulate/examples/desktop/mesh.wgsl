@@ -35,6 +35,9 @@ fn linear(srgb: vec3<f32>) -> vec3<f32> {
 
 fn project(world: vec3<f32>) -> VertexOut {
     var p = (world - camera.framing.xyz) * camera.framing.w;
+    // CAD coordinates stay unchanged for picking, sections and measurements.
+    // Rotate only the view so Z-up CAD models stand upright.
+    if camera.view.y >= 2.0 { p = vec3(p.x, p.z, -p.y); }
     let r = camera.rotation;
     p = vec3(r.x * p.x + r.y * p.z, p.y, -r.y * p.x + r.x * p.z);
     p = vec3(p.x, r.z * p.y - r.w * p.z, r.w * p.y + r.z * p.z);
@@ -45,7 +48,7 @@ fn project(world: vec3<f32>) -> VertexOut {
     var out: VertexOut;
     out.clip = vec4(p.x * 1.85 / camera.view.x, p.y * 1.85,
         far * (d - near) / (far - near) * 0.25, d * 0.25);
-    if camera.view.y > 0.5 {
+    if (u32(camera.view.y) & 1u) != 0u {
         out.clip = vec4(p.x * 1.85 / camera.view.x, p.y * 1.85, 0.5 - p.z * 0.1 * camera.view.z, 1.0);
     }
     out.eye = p;

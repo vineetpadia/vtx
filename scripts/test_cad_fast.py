@@ -46,6 +46,7 @@ class FastDrawingTests(unittest.TestCase):
                 pixels.append(min(choices,key=lambda p:(p[0]-x)**2+(p[1]-y)**2))
             fast=inspect('fast');slow=inspect('fallback',True)
             self.assertEqual(fast['source_info']['reader'],'native_ascii_dxf')
+            self.assertGreater(fast['source_info']['load_ms'], 0)
             self.assertEqual(slow['source_info']['reader'],'ezdxf_fallback')
             self.assertEqual(fast['source_info']['gpu_batches'],1)
             self.assertEqual(fast['source_info']['entities'],5)

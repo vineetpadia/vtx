@@ -1106,7 +1106,11 @@ pub fn load(path: &Path, uploader: &UploadTarget) -> Result<Scene> {
             builder.scene.issues = drawing.source_info["warnings"]
                 .as_array()
                 .map_or(0, Vec::len);
-            builder.scene.notice = Some("2D modelspace projection");
+            builder.scene.notice = Some(if drawing.source_info["kind"] == "drawing_3d" {
+                "Planar ACIS geometry; see import limitations"
+            } else {
+                "2D modelspace projection"
+            });
             builder.scene.source_info = drawing.source_info;
             // Preserve entity order (coplanar painter order), batch adjacent primitive kinds,
             // and carry per-vertex entity IDs so queries retain original handles/layers.

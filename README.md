@@ -19,7 +19,7 @@ Preview builds are unsigned; your OS may ask for approval on first launch. [Inst
 
 Drop a model into the window, or press **Ctrl+O** (**⌘O** on Mac). Drag to orbit, scroll to zoom, **R** to reset.
 
-**Formats:** STL, OBJ, PLY, glTF/GLB, FBX, STEP, 3MF, IFC, and SolidWorks saved display meshes. Common ASCII DXF linework is built in. Full DXF/DWG previews and IGES are available through optional extensions. See [drawing setup and limitations](docs/DRAWINGS.md). Keep model textures and companion files together.
+**Formats:** STL, OBJ, PLY, glTF/GLB, FBX, STEP, 3MF, IFC, and SolidWorks saved display meshes. Common ASCII DXF linework is built in. DXF/DWG drawing previews, planar ACIS solids, and IGES are available through optional extensions. Drawings support disclosed recovery and a verified local cache for repeat opens. See [drawing setup and limitations](docs/DRAWINGS.md). Keep model textures and companion files together.
 
 ## Inspect with an LLM
 

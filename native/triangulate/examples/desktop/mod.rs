@@ -1,4 +1,5 @@
 mod drawing;
+mod drawing_cache;
 mod dxf_fast;
 mod inspect;
 mod measure;
@@ -311,7 +312,10 @@ impl ApplicationHandler<Loaded> for App {
                 viewer.camera = if scene.source_info["kind"] == "drawing_2d" {
                     inspect::plan_camera()
                 } else {
-                    Camera::default()
+                    Camera {
+                        z_up: scene.source_info["kind"] == "drawing_3d",
+                        ..Camera::default()
+                    }
                 };
                 viewer.scene = Some(scene);
                 viewer.first_frame = Some(loaded.started);
@@ -367,7 +371,13 @@ impl ApplicationHandler<Loaded> for App {
                         {
                             inspect::plan_camera()
                         } else {
-                            Camera::default()
+                            Camera {
+                                z_up: viewer
+                                    .scene
+                                    .as_ref()
+                                    .is_some_and(|s| s.source_info["kind"] == "drawing_3d"),
+                                ..Camera::default()
+                            }
                         };
                         viewer.window.request_redraw();
                     }

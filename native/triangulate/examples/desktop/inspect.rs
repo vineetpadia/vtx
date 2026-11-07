@@ -19,6 +19,7 @@ struct Options {
     model: PathBuf,
     output: PathBuf,
     views: Vec<String>,
+    views_explicit: bool,
     size: u32,
     unit: String,
     region: Option<[f32; 6]>,
@@ -36,6 +37,7 @@ impl Options {
             model,
             output: PathBuf::new(),
             views: VIEWS.iter().map(|s| s.to_string()).collect(),
+            views_explicit: false,
             size: 768,
             unit: "model".into(),
             region: None,
@@ -79,6 +81,7 @@ impl Options {
                 _ => return Err(format!("Unknown option {:?}. {}", key, USAGE).into()),
             }
         }
+        options.views_explicit = views_explicit;
         if !views_explicit
             && options
                 .model
@@ -138,7 +141,11 @@ impl Options {
             options.section = Some(normalized);
         }
         for (view, [x, y]) in &options.queries {
-            if !options.views.contains(view) || *x >= options.size || *y >= options.size {
+            if (options.views_explicit && !options.views.contains(view))
+                || (!VIEWS.contains(&view.as_str()) && view != "plan")
+                || *x >= options.size
+                || *y >= options.size
+            {
                 return Err(
                     "Query requires an exported view and a pixel within its model viewport".into(),
                 );
@@ -206,6 +213,7 @@ fn camera(view: &str) -> Camera {
         orthographic: true,
         target: None,
         section: None,
+        z_up: false,
     }
 }
 
@@ -213,11 +221,16 @@ fn camera(view: &str) -> Camera {
 fn basis(camera: &Camera) -> [[f32; 3]; 3] {
     let (sy, cy) = camera.yaw.sin_cos();
     let (sx, cx) = camera.pitch.sin_cos();
-    [
+    let axes = [
         [cy, 0.0, sy],
         [sx * sy, cx, -sx * cy],
         [-cx * sy, sx, cx * cy],
-    ]
+    ];
+    if camera.z_up {
+        axes.map(|[x, y, z]| [x, -z, y])
+    } else {
+        axes
+    }
 }
 
 fn nice_length(target: f64) -> f64 {
@@ -230,7 +243,7 @@ fn nice_length(target: f64) -> f64 {
 }
 
 pub fn run(args: Vec<OsString>) -> Result<()> {
-    let options = Options::parse(args)?;
+    let mut options = Options::parse(args)?;
     // Never mix stale images with a new manifest, or overwrite an existing inspection.
     if options.output.exists() && fs::read_dir(&options.output)?.next().is_some() {
         return Err("Inspection output directory must be empty; choose a new directory".into());
@@ -244,6 +257,16 @@ pub fn run(args: Vec<OsString>) -> Result<()> {
         &options.model,
         &UploadTarget::ready(renderer.uploader.clone()),
     )?;
+    if !options.views_explicit && scene.source_info["kind"] == "drawing_3d" {
+        options.views = VIEWS.iter().map(|s| s.to_string()).collect();
+    }
+    if options
+        .queries
+        .iter()
+        .any(|(view, _)| !options.views.contains(view))
+    {
+        return Err("Query requires an exported view; select it with --views".into());
+    }
     let units = scene.units.overridden(&options.unit);
     measure::validate_unit(&units, options.measure_unit.as_deref())?;
     fs::create_dir_all(&options.output)?;
@@ -270,6 +293,10 @@ pub fn run(args: Vec<OsString>) -> Result<()> {
     let mut query_results = Vec::new();
     for (index, name) in options.views.iter().enumerate() {
         let mut camera = camera(name);
+        camera.z_up = scene.source_info["kind"] == "drawing_3d";
+        if camera.z_up && name == "plan" {
+            camera.pitch = std::f32::consts::FRAC_PI_2;
+        }
         camera.target = target;
         camera.section = options.section.map(|[x, y, z, offset]| [x, y, z, -offset]);
         let selected_queries: Vec<_> = options
@@ -414,7 +441,9 @@ pub fn run(args: Vec<OsString>) -> Result<()> {
         "section":options.section.map(|plane| json!({"plane_normal_offset":plane,"keep":"dot(normal, position) <= offset", "caps":false, "note":"Clipped surfaces are open. Orange marks intersections; no solid cap or new surface is generated."})),
         "queries":query_results,
         "source_info":scene.source_info,
-        "coordinate_convention": "Y up. Front looks from +Z; right from +X; top from +Y. Source coordinates are preserved; view names do not infer semantic front.",
+        "coordinate_convention": if scene.source_info["kind"] == "drawing_3d" {
+            "Z up. Front looks from -Y; right from +X; top/plan from +Z. Source coordinates are preserved; view names do not infer semantic front."
+        } else { "Y up. Front looks from +Z; right from +X; top from +Y. Source coordinates are preserved; view names do not infer semantic front." },
         "units": units,
         "measurements":measurements,
         "bounds": {"min": scene.bounds[0], "max": scene.bounds[1], "size_xyz": spans, "center": scene.center},

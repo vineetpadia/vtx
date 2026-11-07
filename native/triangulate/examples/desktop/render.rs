@@ -22,6 +22,7 @@ pub struct Camera {
     pub orthographic: bool,
     pub target: Option<([f32; 3], f32)>,
     pub section: Option<[f32; 4]>,
+    pub z_up: bool,
 }
 
 impl Default for Camera {
@@ -33,6 +34,7 @@ impl Default for Camera {
             orthographic: false,
             target: None,
             section: None,
+            z_up: false,
         }
     }
 }
@@ -423,7 +425,7 @@ impl Renderer {
                 cx,
                 sx,
                 aspect,
-                u8::from(camera.orthographic) as f32,
+                (u8::from(camera.orthographic) + 2 * u8::from(camera.z_up)) as f32,
                 diameter / scene.diameter,
                 u8::from(camera.section.is_some()) as f32,
             ];
@@ -576,7 +578,10 @@ pub fn check(path: &Path, screenshot: Option<&Path>) -> Result<()> {
         &view,
         &depth,
         Some(&scene),
-        &Camera::default(),
+        &Camera {
+            z_up: scene.source_info["kind"] == "drawing_3d",
+            ..Camera::default()
+        },
         WIDTH as f32 / HEIGHT as f32,
     );
     let submission = renderer.uploader.queue.submit([encoder.finish()]);
@@ -624,7 +629,7 @@ pub fn check(path: &Path, screenshot: Option<&Path>) -> Result<()> {
         ms(initialized + completed), scene.gpu_wait_ms,
         scene.triangles, scene.points, visible, scene.issues);
     eprintln!("GPU: {}", info.name);
-    if scene.source_info["kind"] == "drawing_2d" {
+    if scene.source_info["kind"] == "drawing_2d" || scene.source_info["kind"] == "drawing_3d" {
         eprintln!(
             "CAD: reader={} load_ms={:.3} gpu_batches={} entities={}",
             scene.source_info["reader"].as_str().unwrap_or("unknown"),

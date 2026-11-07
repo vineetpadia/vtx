@@ -21,7 +21,7 @@ pub struct DrawPart {
     pub color: [u8; 4],
     pub metadata: EntityMetadata,
 }
-#[derive(Clone, Copy, PartialEq, Eq, Deserialize)]
+#[derive(Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Primitive {
     Lines,
@@ -73,6 +73,9 @@ fn nearby(relative: &str) -> Option<PathBuf> {
     None
 }
 pub fn load(path: &Path) -> Result<Drawing> {
+    super::drawing_cache::load(path)
+}
+pub(super) fn uncached(path: &Path) -> Result<Drawing> {
     let start = std::time::Instant::now();
     let mut drawing = if path
         .extension()
@@ -83,17 +86,19 @@ pub fn load(path: &Path) -> Result<Drawing> {
         let mut drawing = if let Some(drawing) = super::dxf_fast::load(&converted.path) {
             drawing
         } else {
-            bridge(&converted.path)?
+            bridge(&converted.path).map_err(|e| {
+                format!(
+                    "{}\nDWG conversion diagnostics:\n{}",
+                    e, converted.diagnostics
+                )
+            })?
         };
         drawing.source_info["format"] = serde_json::json!("dwg");
         drawing.source_info["conversion"] = serde_json::json!({"tool":"LibreDWG dwg2dxf","diagnostics":converted.diagnostics,"conversion_ms":converted.elapsed_ms});
-        if converted
-            .diagnostics
-            .to_ascii_lowercase()
-            .contains("warning")
-        {
+        let diagnostics = converted.diagnostics.to_ascii_lowercase();
+        if diagnostics.contains("warning") || diagnostics.contains("error") {
             if let Some(warnings) = drawing.source_info["warnings"].as_array_mut() {
-                warnings.push(serde_json::json!({"reason":"DWG converter reported warnings; inspect conversion diagnostics"}));
+                warnings.push(serde_json::json!({"reason":"DWG converter reported warnings or errors; inspect conversion diagnostics"}));
             }
         }
         drawing
@@ -113,7 +118,7 @@ pub fn load(path: &Path) -> Result<Drawing> {
     }
     Ok(drawing)
 }
-fn converter() -> PathBuf {
+pub(super) fn converter() -> PathBuf {
     std::env::var_os("VTX_DWG2DXF")
         .map(PathBuf::from)
         .or_else(|| {
@@ -197,8 +202,8 @@ fn convert_dwg(path: &Path) -> Result<Converted> {
     converted.elapsed_ms = start.elapsed().as_secs_f64() * 1000.0;
     Ok(converted)
 }
-fn bridge(path: &Path) -> Result<Drawing> {
-    let python = std::env::var_os("VTX_CAD_PYTHON")
+pub(super) fn python() -> PathBuf {
+    std::env::var_os("VTX_CAD_PYTHON")
         .map(PathBuf::from)
         .or_else(|| {
             nearby(if cfg!(windows) {
@@ -212,7 +217,10 @@ fn bridge(path: &Path) -> Result<Drawing> {
                 .map(|p| PathBuf::from(p).join(".local/share/vtx/cad-venv/bin/python"))
                 .filter(|p| p.is_file())
         })
-        .unwrap_or_else(|| PathBuf::from(if cfg!(windows) { "python" } else { "python3" }));
+        .unwrap_or_else(|| PathBuf::from(if cfg!(windows) { "python" } else { "python3" }))
+}
+fn bridge(path: &Path) -> Result<Drawing> {
+    let python = python();
     let mut command = Command::new(&python);
     command.env("VTX_CAD_BINARY", "1");
     command
@@ -256,7 +264,7 @@ struct WireDrawing {
     parts: Vec<WirePart>,
     source_info: serde_json::Value,
 }
-fn decode(bytes: &[u8]) -> Result<Drawing> {
+pub(super) fn decode(bytes: &[u8]) -> Result<Drawing> {
     if !bytes.starts_with(b"VTXCAD01") {
         return Ok(serde_json::from_slice(bytes)?);
     }
