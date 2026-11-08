@@ -1209,7 +1209,7 @@ pub fn load(path: &Path, uploader: &UploadTarget) -> Result<Scene> {
             builder.scene.meters_per_unit = converted.report.meters_per_unit;
             builder.scene.diagnostics.push(converted.report.notice);
             if std::env::var_os("STEPFLASH_PROFILE").is_some() {
-                eprintln!("CAD cache_hit={}", converted.cached);
+                eprintln!("CAD cache_hit={} helper_reused={}", converted.cached, converted.helper_reused);
             }
         }
         "f3d" | "slddrw" => builder.add_saved_image(path)?,

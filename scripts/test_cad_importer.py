@@ -2,11 +2,13 @@
 import argparse
 import json
 import os
+import queue
 from pathlib import Path
 import struct
 import subprocess
 import sys
 import tempfile
+import threading
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -55,15 +57,19 @@ def document(path):
     return json.loads(data[20:20 + length])
 
 
-def invoke(command, isolated=False):
-    # Match VTX's held parent pipe, including normal interpreter shutdown.
+def environment_for(isolated):
     environment = os.environ.copy()
     if isolated:
         for key in ['PYTHONHOME', 'PYTHONPATH', 'VIRTUAL_ENV', 'CONDA_PREFIX',
                     'VTX_CAD_PYTHON', 'LD_LIBRARY_PATH', 'DYLD_LIBRARY_PATH']:
             environment.pop(key, None)
         environment['PATH'] = ''
-    child = subprocess.Popen([*command, '--parent-pipe'], stdin=subprocess.PIPE, env=environment)
+    return environment
+
+
+def invoke(command, isolated=False):
+    # Match VTX's held parent pipe, including normal interpreter shutdown.
+    child = subprocess.Popen([*command, '--parent-pipe'], stdin=subprocess.PIPE, env=environment_for(isolated))
     try:
         return child.wait(timeout=120)
     finally:
@@ -71,6 +77,63 @@ def invoke(command, isolated=False):
             child.kill()
             child.wait()
         child.stdin.close()
+
+
+def server_checks(command, sources, folder, isolated):
+    child = subprocess.Popen([*command, '--serve'], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                             stderr=subprocess.DEVNULL, env=environment_for(isolated))
+    replies = queue.Queue()
+
+    def read_replies():
+        try:
+            while line := child.stdout.readline(4097):
+                if len(line) > 4096:
+                    raise ValueError('Oversized server reply')
+                replies.put(json.loads(line))
+        except Exception as error:
+            replies.put(error)
+
+    reader = threading.Thread(target=read_replies, daemon=True)
+    reader.start()
+    try:
+        # A failed model must not poison the next conversion in the same process.
+        invalid = folder / 'server-invalid.x_b'
+        invalid.write_bytes(b'invalid binary')
+        for number, source in enumerate([*sources, invalid, sources[0]]):
+            output, report = folder / f'server-{number}.glb', folder / f'server-{number}.json'
+            request = dict(id=number, source=str(source), output=str(output), report=str(report))
+            child.stdin.write(json.dumps(request).encode() + b'\n')
+            child.stdin.flush()
+            reply = replies.get(timeout=120)
+            assert isinstance(reply, dict) and reply['id'] == number, reply
+            result = json.loads(report.read_text())
+            assert reply['code'] == (2 if source == invalid else 0), result
+            assert result['success'] == (source != invalid), result
+            if source != invalid:
+                document(output)
+            assert child.poll() is None
+        child.stdin.close()
+        assert child.wait(timeout=5) in (0, 125)
+    finally:
+        if child.poll() is None:
+            child.kill()
+            child.wait()
+        if not child.stdin.closed:
+            child.stdin.close()
+        reader.join(timeout=5)
+        assert not reader.is_alive()
+        child.stdout.close()
+    # Idle workers must exit while the parent is still alive and holds stdin.
+    idle = subprocess.Popen([*command, '--serve', '--idle-seconds', '0.2'], stdin=subprocess.PIPE,
+                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env=environment_for(isolated))
+    try:
+        assert idle.wait(timeout=10) == 0
+    finally:
+        if idle.poll() is None:
+            idle.kill()
+            idle.wait()
+        idle.stdin.close()
+    print('Reusable worker: multiple models, error recovery, parent EOF and idle shutdown passed.')
 
 
 def main():
@@ -81,7 +144,8 @@ def main():
     command = [str(args.helper.resolve())] if args.helper else [sys.executable, '-I', str(ROOT / 'native/cad-importer/convert.py')]
     with tempfile.TemporaryDirectory(prefix='vtx-cad-test-') as temporary:
         folder = Path(temporary)
-        for source in [*fixtures(folder), *args.parasolid]:
+        sources = [*fixtures(folder), *args.parasolid]
+        for source in sources:
             output = folder / (source.name + '.glb')
             report = folder / (source.name + '.json')
             code = invoke([*command, str(source), str(output), '--report', str(report)], isolated=bool(args.helper))
@@ -117,6 +181,7 @@ def main():
         assert code != 0 and not result['success'] and 'curves or wires' in result['error'], result
         assert not output.exists()
         print('Unsupported wire geometry rejected explicitly.')
+        server_checks(command, sources, folder, isolated=bool(args.helper))
 
 
 if __name__ == '__main__':

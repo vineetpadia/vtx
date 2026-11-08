@@ -963,7 +963,7 @@ impl ApplicationHandler<Event> for App {
         }
         match event {
             WindowEvent::CloseRequested => {
-                cad_import::cancel_all();
+                cad_import::shutdown();
                 if self.preview_parent.is_none() {
                     if let Err(error) = self.updater.apply_on_exit(false, Vec::new()) {
                         eprintln!("VTX: {error}");
@@ -1352,6 +1352,9 @@ pub fn run() -> Result<()> {
             .ok_or("Usage: vtx --check MODEL [SCREENSHOT.png]")?;
         let screenshot = args.next();
         return render::check(Path::new(&path), screenshot.as_deref().map(Path::new));
+    }
+    if startup.as_deref().is_some_and(|arg| arg == "--bench-open") {
+        return render::bench_open(&args.map(PathBuf::from).collect::<Vec<_>>());
     }
     if startup.as_deref().is_some_and(|arg| arg == "--ui-check") {
         let model = args

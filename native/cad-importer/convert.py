@@ -6,6 +6,7 @@ import array
 import json
 import math
 import os
+import queue
 from pathlib import Path
 import struct
 import sys
@@ -239,41 +240,99 @@ def write_glb(path: Path, positions, groups):
         f.write(struct.pack('<II', len(data), 0x004e4942)); f.write(data)
 
 
+def convert(source: Path, output: Path, report_path: Path):
+    start = time.perf_counter()
+    try:
+        if source.suffix.lower() not in SUPPORTED:
+            raise ValueError('Unsupported standalone CAD input.')
+        if source.stat().st_size > MAX_INPUT:
+            raise ValueError('CAD input exceeds 512 MiB.')
+        shape, units, notice, colors = convert_shape(source)
+        converted = time.perf_counter()
+        positions, groups, error, faces = tessellate(shape, colors)
+        meshed = time.perf_counter()
+        write_glb(output, positions, groups)
+        exported = time.perf_counter()
+        report = dict(schema=1, success=True, complete=True, meters_per_unit=units,
+            notice=notice, vertices=len(positions)//3, triangles=sum(len(i)//3 for i in groups.values()), materials=len(groups),
+            faces=faces, deflection=error, elapsed_ms=(exported-start)*1000,
+            phases_ms=dict(read_convert=(converted-start)*1000, mesh=(meshed-converted)*1000, export=(exported-meshed)*1000))
+    except Exception as error:
+        # Do not include the input path or a native traceback in public diagnostics.
+        message = str(error).replace(str(source), source.name)
+        report = dict(schema=1, success=False, complete=False,
+            error=f'{type(error).__name__}: {message[:1800]}')
+        report_path.write_text(json.dumps(report), encoding='utf-8')
+        return 2
+    report_path.write_text(json.dumps(report), encoding='utf-8')
+    return 0
+
+
+def serve(idle_seconds):
+    # Keep the protocol on a private duplicate. OCCT and other native readers
+    # may write directly to stdout; those messages must never corrupt replies.
+    with os.fdopen(os.dup(sys.stdout.fileno()), 'wb', buffering=0) as replies:
+        with open(os.devnull, 'wb') as sink:
+            os.dup2(sink.fileno(), sys.stdout.fileno())
+        requests = queue.Queue(maxsize=1)
+
+        def read_commands():
+            pending = bytearray()
+            while True:
+                chunk = os.read(sys.stdin.fileno(), 8192)
+                if not chunk:
+                    os._exit(125)  # Also terminate when the parent disappears.
+                pending.extend(chunk)
+                while b'\n' in pending:
+                    line, _, pending = pending.partition(b'\n')
+                    if len(line) > 256 * 1024:
+                        os._exit(2)
+                    requests.put(line)
+                if len(pending) > 256 * 1024:
+                    os._exit(2)
+
+        threading.Thread(target=read_commands, daemon=True).start()
+        # Bound retained kernel caches; an idle worker exits without a service,
+        # listening port, or background installation on the user's machine.
+        for _ in range(16):
+            try:
+                line = requests.get(timeout=idle_seconds)
+            except queue.Empty:
+                return 0
+            try:
+                request = json.loads(line)
+                if not isinstance(request, dict) or set(request) != {'id', 'source', 'output', 'report'}:
+                    raise ValueError('Invalid conversion request')
+                if type(request['id']) is not int or not all(isinstance(request[k], str) for k in ['source', 'output', 'report']):
+                    raise ValueError('Invalid conversion request fields')
+                code = convert(Path(request['source']), Path(request['output']), Path(request['report']))
+                replies.write(json.dumps(dict(id=request['id'], code=code)).encode() + b'\n')
+            except Exception:
+                return 2  # Malformed protocol or unusable destination: respawn.
+    return 0
+
+
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('source', type=Path)
-    parser.add_argument('output', type=Path)
-    parser.add_argument('--report', type=Path, required=True)
+    parser.add_argument('source', type=Path, nargs='?')
+    parser.add_argument('output', type=Path, nargs='?')
+    parser.add_argument('--report', type=Path)
     parser.add_argument('--parent-pipe', action='store_true')
+    parser.add_argument('--serve', action='store_true')
+    parser.add_argument('--idle-seconds', type=float, default=45)
     args = parser.parse_args()
+    if args.serve:
+        if not 0 < args.idle_seconds <= 120:
+            parser.error('Idle timeout must be greater than zero and at most 120 seconds')
+        return serve(args.idle_seconds)
+    if args.source is None or args.output is None or args.report is None:
+        parser.error('source, output and --report are required for one conversion')
     if args.parent_pipe:
         def parent_watch():
-            # An unbuffered OS read avoids holding a Python buffered-I/O lock
-            # in a daemon thread during interpreter shutdown after success.
             if not os.read(sys.stdin.fileno(), 1):
                 os._exit(125)
         threading.Thread(target=parent_watch, daemon=True).start()
-    start = time.monotonic()
-    try:
-        if args.source.suffix.lower() not in SUPPORTED:
-            raise ValueError('Unsupported standalone CAD input.')
-        if args.source.stat().st_size > MAX_INPUT:
-            raise ValueError('CAD input exceeds 512 MiB.')
-        shape, units, notice, colors = convert_shape(args.source)
-        positions, groups, error, faces = tessellate(shape, colors)
-        write_glb(args.output, positions, groups)
-        report = dict(schema=1, success=True, complete=True, meters_per_unit=units,
-            notice=notice, vertices=len(positions)//3, triangles=sum(len(i)//3 for i in groups.values()), materials=len(groups),
-            faces=faces, deflection=error, elapsed_ms=(time.monotonic()-start)*1000)
-    except Exception as error:
-        # Do not include the input path or a native traceback in public diagnostics.
-        message = str(error).replace(str(args.source), args.source.name)
-        report = dict(schema=1, success=False, complete=False,
-            error=f'{type(error).__name__}: {message[:1800]}')
-        args.report.write_text(json.dumps(report), encoding='utf-8')
-        return 2
-    args.report.write_text(json.dumps(report), encoding='utf-8')
-    return 0
+    return convert(args.source, args.output, args.report)
 
 
 if __name__ == '__main__':

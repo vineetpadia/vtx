@@ -4,10 +4,10 @@ use std::{
     convert::TryInto,
     fs,
     hash::{Hash, Hasher},
-    io::Read,
+    io::{BufRead, BufReader, Read, Write},
     path::{Path, PathBuf},
-    process::{Child, Command, Stdio},
-    sync::{atomic::{AtomicU64, Ordering}, Arc, Mutex, OnceLock, Weak},
+    process::{Child, ChildStdin, Command, Stdio},
+    sync::{atomic::{AtomicU64, Ordering}, mpsc, Arc, Mutex, OnceLock, Weak},
     time::{Duration, Instant, UNIX_EPOCH},
 };
 use serde::{Deserialize, Serialize};
@@ -16,6 +16,7 @@ use super::Result;
 const LIMIT: u64 = 512 * 1024 * 1024;
 static JOBS: OnceLock<Mutex<Vec<Weak<Mutex<Child>>>>> = OnceLock::new();
 static NEXT: AtomicU64 = AtomicU64::new(0);
+static WORKER: OnceLock<Mutex<Option<Worker>>> = OnceLock::new();
 
 pub fn cancel_all() {
     if let Some(jobs) = JOBS.get() {
@@ -24,6 +25,13 @@ pub fn cancel_all() {
                 if let Ok(mut child) = job.lock() { let _ = child.kill(); let _ = child.wait(); }
             }
         }
+    }
+}
+
+pub fn shutdown() {
+    cancel_all();
+    if let Some(worker) = WORKER.get() {
+        if let Ok(mut worker) = worker.lock() { worker.take(); }
     }
 }
 
@@ -40,7 +48,7 @@ pub struct Report {
 }
 #[derive(Serialize, Deserialize)]
 struct Record { identity: Identity, report: Report }
-pub struct Converted { pub path: PathBuf, pub report: Report, pub cached: bool }
+pub struct Converted { pub path: PathBuf, pub report: Report, pub cached: bool, pub helper_reused: bool }
 
 fn stamp(path: &Path) -> Result<(u64, u128)> {
     let m = fs::metadata(path)?;
@@ -98,15 +106,102 @@ fn valid_glb(path: &Path) -> bool {
 fn cached(identity: &Identity, mesh: &Path, record: &Path) -> Option<Converted> {
     let record: Record = serde_json::from_slice(&read_small(record).ok()?).ok()?;
     (record.identity == *identity && valid_report(&record.report) && valid_glb(mesh)).then(||
-        Converted { path: mesh.into(), report: record.report, cached: true })
+        Converted { path: mesh.into(), report: record.report, cached: true, helper_reused: false })
 }
 struct Remove(Vec<PathBuf>);
 impl Drop for Remove { fn drop(&mut self) { for p in &self.0 { let _ = fs::remove_file(p); } } }
-struct Kill(Arc<Mutex<Child>>);
-impl Drop for Kill { fn drop(&mut self) { if let Ok(mut c) = self.0.lock() { let _=c.kill(); let _=c.wait(); } } }
+fn kill(child: &Arc<Mutex<Child>>) {
+    if let Ok(mut child) = child.lock() { let _ = child.kill(); let _ = child.wait(); }
+}
+struct Active { child: Arc<Mutex<Child>>, keep: bool }
+impl Drop for Active {
+    fn drop(&mut self) {
+        if !self.keep { kill(&self.child); }
+        if let Some(jobs) = JOBS.get() {
+            if let Ok(mut jobs) = jobs.lock() {
+                jobs.retain(|job| job.upgrade().is_some_and(|c| !Arc::ptr_eq(&c, &self.child)));
+            }
+        }
+    }
+}
+#[derive(Deserialize)]
+struct Reply { id: u64, code: i32 }
+#[derive(Serialize)]
+struct Request<'a> { id: u64, source: &'a Path, output: &'a Path, report: &'a Path }
+struct Worker {
+    engine: String,
+    child: Arc<Mutex<Child>>,
+    input: ChildStdin,
+    replies: mpsc::Receiver<std::result::Result<Reply, String>>,
+    last_used: Instant,
+    uses: u32,
+}
+impl Drop for Worker { fn drop(&mut self) { kill(&self.child); } }
+impl Worker {
+    fn spawn(mut command: Command, engine: String) -> Result<Self> {
+        command.arg("--serve").stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::null());
+        #[cfg(windows)] { use std::os::windows::process::CommandExt; command.creation_flags(0x08000000); }
+        let mut child = command.spawn()?;
+        let input = child.stdin.take().ok_or("Missing CAD request pipe")?;
+        let output = child.stdout.take().ok_or("Missing CAD reply pipe")?;
+        let child = Arc::new(Mutex::new(child));
+        let (send, replies) = mpsc::sync_channel(1);
+        let reader = std::thread::Builder::new().name("VTX CAD replies".into()).spawn(move || {
+            let mut reader = BufReader::new(output);
+            loop {
+                let mut line = Vec::new();
+                let reply = match (&mut reader).take(4097).read_until(b'\n', &mut line) {
+                    Ok(0) => break,
+                    Ok(_) if line.len() <= 4096 && line.last() == Some(&b'\n') =>
+                        serde_json::from_slice(&line).map_err(|_| "Invalid CAD reply".to_string()),
+                    _ => Err("Invalid or oversized CAD reply".to_string()),
+                };
+                let failed = reply.is_err();
+                if send.send(reply).is_err() || failed { break; }
+            }
+        });
+        if let Err(error) = reader { kill(&child); return Err(error.into()); }
+        Ok(Self { engine, child, input, replies, last_used: Instant::now(), uses: 0 })
+    }
+    fn reusable(&self, engine: &str) -> bool {
+        self.engine == engine && self.uses < 16 && self.last_used.elapsed() < Duration::from_secs(30)
+            && self.child.lock().ok().is_some_and(|mut c| c.try_wait().is_ok_and(|s| s.is_none()))
+    }
+}
+
+fn convert(command: Command, engine: String, source: &Path, output: &Path, report: &Path) -> Result<(bool, bool)> {
+    let mut slot = WORKER.get_or_init(Default::default).lock().map_err(|_| "CAD worker lock failed")?;
+    let reused = slot.as_ref().is_some_and(|worker| worker.reusable(&engine));
+    if !reused { slot.take(); *slot = Some(Worker::spawn(command, engine)?); }
+    let worker = slot.as_mut().unwrap();
+    let mut active = Active { child: worker.child.clone(), keep: false };
+    JOBS.get_or_init(Default::default).lock().map_err(|_| "CAD job lock failed")?
+        .push(Arc::downgrade(&worker.child));
+    let id = NEXT.fetch_add(1, Ordering::Relaxed);
+    let request = Request { id, source, output, report };
+    serde_json::to_writer(&mut worker.input, &request)?;
+    worker.input.write_all(b"\n")?;
+    worker.input.flush()?;
+    let deadline = Instant::now();
+    loop {
+        match worker.replies.recv_timeout(Duration::from_millis(25)) {
+            Ok(reply) => {
+                let reply = reply?;
+                if reply.id != id || ![0, 2].contains(&reply.code) { return Err("Unexpected CAD conversion reply".into()); }
+                worker.uses += 1;
+                worker.last_used = Instant::now();
+                active.keep = true;
+                return Ok((reply.code == 0, reused));
+            }
+            Err(mpsc::RecvTimeoutError::Disconnected) => return Err("The standalone CAD importer stopped unexpectedly".into()),
+            Err(mpsc::RecvTimeoutError::Timeout) => (),
+        }
+        if deadline.elapsed() > Duration::from_secs(120) { return Err("CAD conversion exceeded two minutes".into()); }
+    }
+}
 
 pub fn load(source: &Path) -> Result<Converted> {
-    let (mut command, engine) = helper()?;
+    let (command, engine) = helper()?;
     let source = source.canonicalize()?;
     let (size, modified) = stamp(&source)?;
     if size > LIMIT { return Err("CAD input exceeds 512 MiB".into()); }
@@ -144,26 +239,13 @@ pub fn load(source: &Path) -> Result<Converted> {
     let report_path = root.join(format!("{key}-{suffix}.tmp.json"));
     let record_tmp = root.join(format!("{key}-{suffix}.record.json"));
     let _temp = Remove(vec![output.clone(), report_path.clone(), record_tmp.clone()]);
-    command.arg(&source).arg(&output).arg("--report").arg(&report_path).arg("--parent-pipe")
-        .stdin(Stdio::piped()).stdout(Stdio::null()).stderr(Stdio::null());
-    #[cfg(windows)] { use std::os::windows::process::CommandExt; command.creation_flags(0x08000000); }
-    let child = Arc::new(Mutex::new(command.spawn()?));
-    let _kill = Kill(child.clone());
-    {
-        let mut jobs = JOBS.get_or_init(Default::default).lock().unwrap();
-        jobs.retain(|j| j.strong_count() != 0); jobs.push(Arc::downgrade(&child));
-    }
-    let deadline = Instant::now();
-    let status = loop {
-        if let Some(status) = child.lock().unwrap().try_wait()? { break status; }
-        if deadline.elapsed() > Duration::from_secs(120) { return Err("CAD conversion exceeded two minutes".into()); }
-        std::thread::sleep(Duration::from_millis(25));
-    };
+    let engine_key = format!("{}:{}", engine.display(), identity.engine);
+    let (success, helper_reused) = convert(command, engine_key, &source, &output, &report_path)?;
     let report: Report = serde_json::from_slice(&read_small(&report_path).map_err(|_|
         "The standalone CAD importer exited without a conversion report")?)?;
-    if !status.success() || !valid_report(&report) {
+    if !success || !valid_report(&report) {
         return Err(format!("Standalone CAD import failed: {}", if report.error.is_empty() {
-            format!("converter exited with {status}")
+            "converter did not validate this model".into()
         } else { report.error }).into());
     }
     if !valid_glb(&output) { return Err("The CAD importer produced an invalid or oversized mesh".into()); }
@@ -173,7 +255,7 @@ pub fn load(source: &Path) -> Result<Converted> {
     if mesh.exists() { fs::remove_file(&mesh)?; }
     if record.exists() { fs::remove_file(&record)?; }
     fs::rename(&output, &mesh)?; fs::rename(&record_tmp, &record)?;
-    Ok(Converted { path: mesh, report, cached: false })
+    Ok(Converted { path: mesh, report, cached: false, helper_reused })
 }
 
 #[cfg(test)]

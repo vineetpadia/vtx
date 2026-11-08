@@ -1159,6 +1159,49 @@ pub fn check(path: &Path, screenshot: Option<&Path>) -> Result<()> {
     offscreen(path, screenshot, 768, 512, true)
 }
 
+/// Measure successive model opens using one renderer, as in the desktop app.
+/// Reports GPU completion, without PNG encoding or pretending it is screen presentation.
+pub fn bench_open(paths: &[std::path::PathBuf]) -> Result<()> {
+    if paths.is_empty() { return Err("Usage: vtx --bench-open MODEL [MODEL ...]".into()); }
+    struct Shutdown;
+    impl Drop for Shutdown { fn drop(&mut self) { super::cad_import::shutdown(); } }
+    let _shutdown = Shutdown;
+    let init = Instant::now();
+    let format = wgpu::TextureFormat::Rgba8UnormSrgb;
+    let renderer = initialize(|instance| Renderer::new(&adapter(instance, None)?, format))?;
+    let initialized = init.elapsed().as_secs_f64() * 1000.;
+    let (width, height) = (768, 512);
+    let color = renderer.uploader.device.create_texture(&wgpu::TextureDescriptor {
+        label: Some("VTX successive-open benchmark"), size: extent(width, height),
+        mip_level_count: 1, sample_count: 1, dimension: wgpu::TextureDimension::D2,
+        format, usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
+        view_formats: &[],
+    });
+    let view = color.create_view(&Default::default());
+    let depth = renderer.depth(width, height);
+    println!("{}", serde_json::json!({"renderer_init_ms":initialized}));
+    for path in paths {
+        let start = Instant::now();
+        let scene = super::model::load(path, &UploadTarget::ready(renderer.uploader.clone()))?;
+        let ready = start.elapsed().as_secs_f64() * 1000.;
+        let mut camera = Camera::default();
+        camera.fit(&scene, width as f32 / height as f32);
+        let mut encoder = renderer.uploader.device.create_command_encoder(&Default::default());
+        renderer.draw(&mut encoder, &view, &depth, Some(&scene), &camera,
+            width as f32 / height as f32, [width, height]);
+        let submission = renderer.uploader.queue.submit([encoder.finish()]);
+        renderer.uploader.device.poll(wgpu::PollType::WaitForSubmissionIndex(submission))?;
+        let frame = start.elapsed().as_secs_f64() * 1000.;
+        let pixels = read_rgba(&renderer.uploader.device, &renderer.uploader.queue, &color, width, height)?;
+        if pixels.chunks_exact(4).all(|p| p == &pixels[..4]) {
+            return Err("Successive-open check rendered a uniform background".into());
+        }
+        println!("{}", serde_json::json!({"file":path.file_name().map(|s| s.to_string_lossy()),"ready_ms":ready,
+            "gpu_frame_ms":frame,"triangles":scene.triangles,"lines":scene.lines,"issues":scene.issues}));
+    }
+    Ok(())
+}
+
 fn read_rgba(
     device: &wgpu::Device,
     queue: &wgpu::Queue,

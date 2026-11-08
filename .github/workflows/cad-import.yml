@@ -41,15 +41,18 @@ jobs:
       - name: Install standalone reader and freezing tools
         run: python -m pip install -r native/cad-importer/requirements.txt
       - name: Download pinned public Parasolid test input
-        run: >-
-          curl --fail --location --output "$RUNNER_TEMP/sphere.x_t"
+        run: |
+          curl --fail --location --output "$RUNNER_TEMP/sphere.x_t" \
           https://raw.githubusercontent.com/SCOREC/core/fd4386fddb3543b7dbc9cfe41f98af04a57a3df7/python_wrappers/input/sphere.x_t
+          curl --fail --location --output "$RUNNER_TEMP/part.x_b" \
+          https://media.githubusercontent.com/media/Himalia13/42006-Technic-Model/47a433c49296d15b5f239619b8812921ce8d8c54/Parts/X_B/Ye_389424_MCM.x_b
+          python -c "import hashlib,os,pathlib; assert hashlib.sha256((pathlib.Path(os.environ['RUNNER_TEMP'])/'part.x_b').read_bytes()).hexdigest() == 'a927b362902b7a57c21a8feec1fe86e60cf8f24a6000727d892f757395a1f88d'"
       - name: Test real Parasolid, drilled IGES and BREP, and rejected binary input
-        run: python scripts/test_cad_importer.py --parasolid "$RUNNER_TEMP/sphere.x_t"
+        run: python scripts/test_cad_importer.py --parasolid "$RUNNER_TEMP/sphere.x_t" --parasolid "$RUNNER_TEMP/part.x_b"
       - name: Freeze reader without an end-user Python requirement
         run: python scripts/build_cad_importer.py --output helper-dist --work helper-build
       - name: Exercise frozen standalone reader
-        run: python scripts/test_cad_importer.py --helper 'helper-dist/vtx-cad-import/${{ matrix.helper }}' --parasolid "$RUNNER_TEMP/sphere.x_t"
+        run: python scripts/test_cad_importer.py --helper 'helper-dist/vtx-cad-import/${{ matrix.helper }}' --parasolid "$RUNNER_TEMP/sphere.x_t" --parasolid "$RUNNER_TEMP/part.x_b"
       - name: Install Linux desktop build libraries
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y libxkbcommon-dev libwayland-dev libvulkan-dev
