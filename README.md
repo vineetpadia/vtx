@@ -1,48 +1,41 @@
 # VTX
 
-A fast, local 3D viewer for Windows, macOS, and Linux. Open large models in a standalone GPU-rendered app.
+A fast, local CAD and 3D viewer. Minimal UI, clear views, familiar controls.
 
-## Download
+![VTX showing an openly licensed NEMA-17 stepper motor model](docs/media/nema17-viewer.png)
 
-| Platform | Download |
-|---|---|
-| Windows x64 | [Windows ZIP](https://github.com/vineetpadia/vtx/releases/latest/download/vtx-windows-x64.zip) |
-| Mac — Apple silicon | [Mac ZIP](https://github.com/vineetpadia/vtx/releases/latest/download/vtx-macos-arm64.zip) |
-| Mac — Intel | [Mac ZIP](https://github.com/vineetpadia/vtx/releases/latest/download/vtx-macos-x64.zip) |
-| Linux x64 | [Linux archive](https://github.com/vineetpadia/vtx/releases/latest/download/vtx-linux-x64.tar.gz) |
+**Download:** [Windows installer](https://github.com/vineetpadia/vtx/releases/latest/download/VTX-Setup.exe) · [Mac Apple silicon](https://github.com/vineetpadia/vtx/releases/latest/download/vtx-macos-arm64.zip) · [Mac Intel](https://github.com/vineetpadia/vtx/releases/latest/download/vtx-macos-x64.zip) · [Linux](https://github.com/vineetpadia/vtx/releases/latest/download/vtx-linux-x64.tar.gz)
 
-**Windows:** use [VTX-Setup.exe](https://github.com/vineetpadia/vtx/releases/latest/download/VTX-Setup.exe) for automatic updates, or extract the portable archive. On Mac, drag **VTX.app** into Applications. No Rust or Python needed.
+Releases are private; sign in to GitHub with repository access. [Installation help and portable downloads →](docs/INSTALL.md)
 
-The Windows installer checks for updates after the first view appears, downloads verified packages in the background, and applies them when the last VTX window closes. **… → Check for updates** offers a manual check/restart. Existing file defaults and separate Explorer previews are preserved. This repository's releases are private: automatic downloads use an existing GitHub CLI login with repository access; tokens are not bundled or saved by VTX. See [installation details](docs/INSTALL.md).
+## Features
 
-Preview builds are unsigned; your OS may ask for approval on first launch. [Installation help and system requirements](docs/INSTALL.md) · [All releases](https://github.com/vineetpadia/vtx/releases)
+- **Measure:** select lines and curves; compare edge gaps, lengths, and angles. Measure point distances, XYZ offsets, diameters, and radii, with snapping and mm/inch display.
+- **Section:** slide an X, Y, or Z cutting plane through a model.
+- **Clear CAD views:** white background, edge outlines, supported colors, transparency, and labels. Standard views and orthographic projection.
+- **Familiar navigation:** SolidWorks-style mouse controls and zoom toward the pointer.
+- **3D models and 2D drawings:** SolidWorks, STEP, STL, OBJ, PLY, glTF/GLB, FBX, 3MF, IFC, and DXF. IGES through an optional extension.
+- **Local viewing:** no model uploads or separate CAD application required.
+- **Windows extras:** background auto-updates and an optional, separately installed navigable Explorer preview.
 
-## Use
+Mesh measurements are approximate; SolidWorks appearances and DXF entities have limits. [Format and tool details →](docs/INSTALL.md#open-a-model)
 
-Drop a model into the window, or press **Ctrl+O** (**⌘O** on Mac). Middle-drag to rotate, **Ctrl+middle-drag** to pan, **Shift+middle-drag** to zoom, and **F** to fit. Scroll to zoom toward the pointer; **R** resets the view.
+## In action
 
-**Formats:** STL, OBJ, PLY, glTF/GLB, FBX, STEP, 3MF, IFC, and SolidWorks saved display meshes. IGES is available through an optional extension. Keep model textures and companion files together.
+| Orbit a model | Move a section plane |
+|:---:|:---:|
+| ![NEMA-17 stepper motor rotating in VTX](docs/media/nema17-orbit.gif) | ![Section plane moving through the stepper motor](docs/media/nema17-section.gif) |
 
-The current source build also opens DXF drawings in a fitted 2D view with pan, zoom and antialiased linework. The light viewer background is pure white. This DXF support is newer than the published v0.1.1 download. See [installation and format limits](docs/INSTALL.md).
+| Measure a diameter | Open a DXF drawing |
+|:---:|:---:|
+| ![Bearing rim selected with its diameter shown in model units](docs/media/bearing-diameter.png) | ![Openly licensed DXF contours displayed in VTX's 2D view](docs/media/dxf-contours.png) |
 
-The main app has a compact **Open / Measure / Section / Views** toolbar. Hover and click recognized lines/curves to select them; **Ctrl-click** a second edge for minimum gap, lengths and straight-line angle. Smooth curves select as whole paths. Measure also supports point distances, XYZ offsets, three-point angles, endpoint/center snaps, and **diameter/radius** on circular rims or cylindrical walls. Results copy in mm/inches when source units are known or specified. Feature analysis runs on demand; hover uses a cache and asynchronous visibility checks. Mesh-derived values are labelled approximate; native DXF circles/arcs preserve source geometry. Section along X/Y/Z with a movable plane; use standard and orthographic views. Panels appear only while needed. Unknown source units are never assumed. These tools are in the source build, not the older published download.
+Openly licensed examples: [model sources and credits](docs/media/SOURCES.md). Visuals use VTX's native renderer; GIFs use scripted motion, not real-time performance recordings.
 
-The source-build [Explorer preview handler](native/windows-preview/README.md) shows a saved/cached image first, then a navigable GPU view in the same pane. Middle-drag to rotate, Ctrl+middle-drag to pan, wheel to zoom and F to fit; DXF drawings pan in 2D. Preview registration is independent of the default app used for double-clicking.
+## Controls
 
-## Performance
+Drop a file or press **Ctrl+O** (**⌘O** on Mac). **Middle-drag** rotates, **Ctrl+middle-drag** pans, **scroll** zooms, and **F** fits. Click an edge to measure; **Ctrl-click** a second to compare. **Esc** clears tools.
 
-Same PC, same file, warm cache; median geometry-import times. These exclude app startup and rendering.
+[Build from source](docs/DEVELOPMENT.md) · [Benchmarks](docs/BENCHMARKS.md) · [Release notes](docs/RELEASE_NOTES.md) · [Explorer preview setup](native/windows-preview/README.md)
 
-| Model | Compared with | Reference | VTX | Speedup |
-|---|---|---:|---:|---:|
-| Voron STEP, 6.43M triangles | Foxtrot | 4,415 ms | 3,182 ms | **1.39×** |
-| Rungholt OBJ, 6.70M triangles | RapidOBJ | 196.85 ms | 60.55 ms | **3.25×** |
-| A Beautiful Game GLB, 1.50M triangles | FastGLTF | 36.96 ms | 5.48 ms | **6.74×** |
-
-Geometry was checked against each reference. Voron retains 666 tessellation errors in both readers. Reader feature coverage differs; see [all comparisons, methods, and limitations](docs/BENCHMARKS.md).
-
-[Build from source](docs/DEVELOPMENT.md) · [Benchmark models](docs/BENCHMARKS.md#public-benchmark-models)
-
-VTX's STEP core derives from [Formlabs Foxtrot](https://github.com/formlabs/foxtrot), under [MIT](native/LICENSE-MIT) / [Apache 2.0](native/LICENSE-APACHE). See [third-party attribution](vendor/sldprt/NOTICE.md) for the SolidWorks reader.
-
-DXF decoding uses [dxf-rs](https://github.com/ixmilia/dxf-rs), under the MIT license. The Windows icon is an original vector asset in [assets/vtx.svg](assets/vtx.svg).
+STEP core based on [Formlabs Foxtrot](https://github.com/formlabs/foxtrot) ([MIT](native/LICENSE-MIT) / [Apache 2.0](native/LICENSE-APACHE)). [SolidWorks reader attribution](vendor/sldprt/NOTICE.md) · DXF decoding by [dxf-rs](https://github.com/ixmilia/dxf-rs) (MIT).
