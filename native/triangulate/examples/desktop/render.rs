@@ -733,7 +733,7 @@ impl Renderer {
             }),
             ..Default::default()
         });
-        if camera.edges {
+        if camera.edges && scene.is_some_and(|s| s.raster_size.is_none()) {
             if let Some(scene) = scene {
                 self.draw_parts(&mut pass, scene, false, true, camera);
                 self.draw_parts(&mut pass, scene, true, true, camera);
@@ -763,7 +763,7 @@ impl Renderer {
             }),
             ..Default::default()
         });
-        if camera.edges {
+        if camera.edges && scene.is_some_and(|s| s.raster_size.is_none()) {
             if let Some(scene) = scene {
                 self.draw_parts(&mut pass, scene, false, true, camera);
             }
@@ -818,7 +818,7 @@ impl Renderer {
             aspect,
             u8::from(camera.cad_lighting) as f32,
             u8::from(camera.light_background) as f32,
-            u8::from(camera.edges) as f32,
+            u8::from(camera.edges && scene.is_some_and(|s| s.raster_size.is_none())) as f32,
         ];
         self.uploader
             .queue

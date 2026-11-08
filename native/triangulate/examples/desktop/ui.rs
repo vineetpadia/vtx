@@ -902,15 +902,19 @@ impl Tools {
                 .show(ctx, |ui| {
                     ui.label(RichText::new(name).strong());
                     if let Some(scene) = scene {
-                        ui.label(format!(
-                            "{} triangles  ·  {} segments  ·  {} points",
-                            scene.triangles, scene.lines, scene.points
-                        ));
-                        ui.label(if scene.meters_per_unit.is_some() {
-                            "Source units recognized"
+                        if let Some([w, h]) = scene.raster_size {
+                            ui.label(format!("Saved image · {w} × {h} px"));
                         } else {
-                            "Source units unspecified"
-                        });
+                            ui.label(format!(
+                                "{} triangles  ·  {} segments  ·  {} points",
+                                scene.triangles, scene.lines, scene.points
+                            ));
+                            ui.label(if scene.meters_per_unit.is_some() {
+                                "Source units recognized"
+                            } else {
+                                "Source units unspecified"
+                            });
+                        }
                         if !scene.diagnostics.is_empty() {
                             ui.separator();
                             egui::ScrollArea::vertical()

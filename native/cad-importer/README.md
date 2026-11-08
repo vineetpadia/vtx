@@ -7,7 +7,7 @@ SolidWorks display-data readers remain independent of this helper.
 | Input | Current behavior |
 | --- | --- |
 | Parasolid X_T / X_B and aliases | Experimental schema/geometry subset through parasolid-kit 0.3.15. Complete supported geometry only; assembly placements and supported face/body RGB. Units require user selection. Modern B3 binary encoding and some neutral PS binary schemas fail explicitly. This is **not universal Parasolid support**. |
-| IGES / IGS | OCCT face tessellation, normalized to millimeters. Source materials are not yet preserved. Wire-only geometry is not displayed. |
+| IGES / IGS | OCCT face tessellation and supported surface RGB, normalized to millimeters. Textures/transparency and wire-only geometry are not displayed. |
 | Open CASCADE BREP | Face tessellation; source units require user selection. |
 | Fusion F3D | Separate built-in saved-image fallback. Pan/zoom only; no native 3D geometry or measurement. |
 | SolidWorks SLDDRW | Separate built-in saved-image fallback. Pan/zoom only; no drawing entities or measurement. |

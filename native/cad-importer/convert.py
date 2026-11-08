@@ -41,14 +41,68 @@ def convert_shape(path: Path):
         if not BRepTools.Read_s(shape, str(path), BRep_Builder()):
             raise ValueError('Open CASCADE could not read this BREP file.')
         return shape, None, 'Open CASCADE BREP geometry; source units unspecified.', lambda face: None
-    from OCP.IGESControl import IGESControl_Reader
+    from OCP.IGESCAFControl import IGESCAFControl_Reader
     from OCP.IFSelect import IFSelect_RetDone
-    reader = IGESControl_Reader()
+    from OCP.TDocStd import TDocStd_Document
+    from OCP.TCollection import TCollection_ExtendedString
+    from OCP.TDF import TDF_LabelSequence
+    from OCP.XCAFDoc import XCAFDoc_DocumentTool
+    from OCP.TopoDS import TopoDS_Compound
+    reader = IGESCAFControl_Reader()
+    reader.SetColorMode(True)
     if reader.ReadFile(str(path)) != IFSelect_RetDone:
         raise ValueError('Open CASCADE could not read this IGES file.')
-    if reader.TransferRoots() == 0:
+    roots = reader.NbRootsForTransfer()
+    if roots == 0 or reader.TransferRoots() != roots:
+        raise ValueError('An IGES root could not be converted. No partial model was displayed.')
+    checks = reader.WS().TransferReader().TransientProcess().CheckList(True)
+    checks.Start()
+    while checks.More():
+        if checks.Value().HasFailed():
+            raise ValueError('IGES transfer reported a failed entity. No partial model was displayed.')
+        checks.Next()
+    document = TDocStd_Document(TCollection_ExtendedString('VTX'))
+    if not reader.Transfer(document):
         raise ValueError('The IGES file has no transferable geometry.')
-    return reader.OneShape(), 0.001, 'IGES geometry normalized to millimeters; source materials are not yet imported.', lambda face: None
+    shapes = XCAFDoc_DocumentTool.ShapeTool_s(document.Main())
+    labels = TDF_LabelSequence()
+    shapes.GetFreeShapes(labels)
+    compound = TopoDS_Compound()
+    builder = BRep_Builder()
+    builder.MakeCompound(compound)
+    for i in range(1, labels.Length() + 1):
+        builder.Add(compound, shapes.GetShape_s(labels.Value(i)))
+    colors = iges_colors(compound, XCAFDoc_DocumentTool.ColorTool_s(document.Main()))
+    return compound, 0.001, 'IGES geometry and supported surface RGB; normalized to millimeters. Textures and transparency are not imported.', colors
+
+
+def iges_colors(shape, tool):
+    from OCP.TopTools import TopTools_IndexedMapOfShape
+    from OCP.TopoDS import TopoDS_Iterator
+    from OCP.TopAbs import TopAbs_FACE
+    from OCP.Quantity import Quantity_Color, Quantity_TOC_sRGB
+    from OCP.XCAFDoc import XCAFDoc_ColorSurf, XCAFDoc_ColorGen
+    faces = TopTools_IndexedMapOfShape()
+    colors = {}
+    stack = [(shape, None)]
+    visits = 0
+    while stack:
+        current, inherited = stack.pop()
+        visits += 1
+        if visits > MAX_FACES * 32:
+            raise ValueError('CAD topology traversal limit exceeded.')
+        color = Quantity_Color()
+        if tool.GetColor(current, XCAFDoc_ColorSurf, color) or tool.GetColor(current, XCAFDoc_ColorGen, color):
+            inherited = color.Values(Quantity_TOC_sRGB)
+        if current.ShapeType() == TopAbs_FACE:
+            if inherited is not None:
+                colors[faces.Add(current)] = inherited
+            continue
+        iterator = TopoDS_Iterator(current)
+        while iterator.More():
+            stack.append((iterator.Value(), inherited))
+            iterator.Next()
+    return lambda face: colors.get(faces.FindIndex(face))
 
 
 def parasolid_colors(brep, converted):
@@ -85,12 +139,14 @@ def tessellate(shape, face_color=lambda face: None):
     from OCP.BRepCheck import BRepCheck_Analyzer
     from OCP.BRepMesh import BRepMesh_IncrementalMesh
     from OCP.Bnd import Bnd_Box
-    from OCP.TopAbs import TopAbs_FACE, TopAbs_REVERSED
+    from OCP.TopAbs import TopAbs_EDGE, TopAbs_FACE, TopAbs_REVERSED
     from OCP.TopExp import TopExp_Explorer
     from OCP.TopoDS import TopoDS
     from OCP.TopLoc import TopLoc_Location
     if shape.IsNull() or not BRepCheck_Analyzer(shape).IsValid():
         raise ValueError('CAD conversion did not produce valid geometry.')
+    if TopExp_Explorer(shape, TopAbs_EDGE, TopAbs_FACE).More():
+        raise ValueError('This CAD file includes standalone curves or wires, which this face importer cannot display. No partial model was displayed.')
     bounds = Bnd_Box()
     BRepBndLib.Add_s(shape, bounds)
     box = bounds.Get()
