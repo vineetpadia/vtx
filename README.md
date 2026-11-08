@@ -22,6 +22,8 @@ Most of VTX is LLM-generated. I built it because I was frustrated with slow 3D v
 
 Mesh measurements are approximate; SolidWorks appearances and DXF entities have limits. [Format and tool details →](docs/INSTALL.md#open-a-model)
 
+In development: [standalone Parasolid/IGES/BREP import and saved-image fallbacks](native/cad-importer/README.md). These are experimental and are not included in the stable downloads above.
+
 ## In action
 
 | Orbit a model | Move a section plane |

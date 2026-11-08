@@ -758,6 +758,7 @@ impl Job {
         device: &wgpu::Device,
         queue: &wgpu::Queue,
     ) -> std::result::Result<Self, String> {
+        if scene.raster_size.is_some() { return Err("Saved images contain no selectable model geometry".into()); }
         let sources: Vec<_> = scene
             .parts
             .iter()

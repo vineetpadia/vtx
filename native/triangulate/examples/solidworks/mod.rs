@@ -28,6 +28,13 @@ const PART_WELD_INVERSE: f64 = 10_000.0;
 /// or opening SolidWorks. Modern files normally keep PreviewPNG near the end.
 pub fn saved_preview(path: &Path, output: &Path) -> Result<()> {
     let start = Instant::now();
+    let png = saved_preview_bytes(path)?;
+    fs::write(output, &png)?;
+    println!("saved_preview_ms={:.3} bytes={}", start.elapsed().as_secs_f64()*1000., png.len());
+    Ok(())
+}
+
+pub fn saved_preview_bytes(path: &Path) -> Result<Vec<u8>> {
     let mut source = fs::File::open(path)?;
     let length = source.metadata()?.len();
     let tail_start = length.saturating_sub(4 * 1024 * 1024);
@@ -36,6 +43,7 @@ pub fn saved_preview(path: &Path, output: &Path) -> Result<()> {
     source.read_to_end(&mut bytes)?;
     let mut directory = blocks(&bytes);
     if !directory.contains_key("PreviewPNG") && tail_start != 0 {
+        if length > MAX_BLOCK as u64 { return Err("No saved image in the bounded preview search".into()); }
         bytes = fs::read(path)?;
         directory = blocks(&bytes);
     }
@@ -51,13 +59,7 @@ pub fn saved_preview(path: &Path, output: &Path) -> Result<()> {
     if !(1..=4096).contains(&dimension(16)) || !(1..=4096).contains(&dimension(20)) {
         return Err("Saved preview dimensions exceed the limit".into());
     }
-    fs::write(output, &png)?;
-    println!(
-        "saved_preview_ms={:.3} bytes={}",
-        start.elapsed().as_secs_f64() * 1000.0,
-        png.len()
-    );
-    Ok(())
+    Ok(png.into_owned())
 }
 
 #[derive(Clone, Default)]

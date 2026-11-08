@@ -1,4 +1,5 @@
 mod camera;
+mod cad_import;
 mod edges;
 #[cfg(windows)]
 mod embedded;
@@ -7,6 +8,7 @@ mod model;
 mod navigation;
 mod picking;
 mod render;
+mod saved_image;
 mod ui;
 mod ui_gpu;
 mod updates;
@@ -253,7 +255,8 @@ impl Viewer {
         }
     }
     fn queue_hover(&mut self) {
-        if self.ui.is_none() || self.scene.is_none() || self.dragging.is_some() {
+        if self.ui.is_none() || self.scene.is_none() || self.dragging.is_some()
+            || self.scene.as_ref().is_some_and(|s| s.raster_size.is_some()) {
             return;
         }
         if let Some(p) = self.cursor {
@@ -478,6 +481,7 @@ struct App {
 
 impl App {
     fn start_load(&mut self, path: PathBuf, uploader: UploadTarget) -> std::io::Result<()> {
+        cad_import::cancel_all();
         self.current_file = Some(path.clone());
         let proxy = self.proxy.clone();
         spawn_import(path, uploader, move |loaded| {
@@ -959,6 +963,7 @@ impl ApplicationHandler<Event> for App {
         }
         match event {
             WindowEvent::CloseRequested => {
+                cad_import::shutdown();
                 if self.preview_parent.is_none() {
                     if let Err(error) = self.updater.apply_on_exit(false, Vec::new()) {
                         eprintln!("VTX: {error}");
@@ -1128,6 +1133,9 @@ impl ApplicationHandler<Event> for App {
                         (viewer.measure_click.take(), viewer.cursor)
                     {
                         viewer.dragging = None;
+                        if viewer.scene.as_ref().is_some_and(|s| s.raster_size.is_some()) {
+                            return;
+                        }
                         if viewer.pending_hover.take().is_some() {
                             viewer.pending_pick = None;
                         }
@@ -1344,6 +1352,9 @@ pub fn run() -> Result<()> {
             .ok_or("Usage: vtx --check MODEL [SCREENSHOT.png]")?;
         let screenshot = args.next();
         return render::check(Path::new(&path), screenshot.as_deref().map(Path::new));
+    }
+    if startup.as_deref().is_some_and(|arg| arg == "--bench-open") {
+        return render::bench_open(&args.map(PathBuf::from).collect::<Vec<_>>());
     }
     if startup.as_deref().is_some_and(|arg| arg == "--ui-check") {
         let model = args
