@@ -1,9 +1,13 @@
 param(
     [string]$InstallDirectory = (Join-Path $env:LOCALAPPDATA 'VTXPreview'),
     [string]$BuildDirectory = (Join-Path $PSScriptRoot 'build'),
+    [switch]$RegisterOpenWith,
     [switch]$Uninstall
 )
 $ErrorActionPreference = 'Stop'
+# Windows PowerShell's hash/JSON helpers are script exports; load the matching
+# built-in module explicitly when launched from a newer PowerShell environment.
+Import-Module (Join-Path $PSHOME 'Modules\Microsoft.PowerShell.Utility\Microsoft.PowerShell.Utility.psd1')
 $InstallDirectory = [IO.Path]::GetFullPath($InstallDirectory)
 $backupPath = Join-Path $InstallDirectory 'preview-registration-backup.json'
 $root = [Microsoft.Win32.Registry]::CurrentUser
@@ -20,7 +24,13 @@ function Notify-Explorer {
 if ($Uninstall) {
     if (-not (Test-Path -LiteralPath $backupPath)) { throw "No registration backup at $backupPath" }
     $state = Get-Content -LiteralPath $backupPath -Raw | ConvertFrom-Json
+    $appKey = $root.OpenSubKey('Software\Classes\Applications\VTX.exe\shell\open\command')
+    try { $ownsOpenWith = $null -ne $appKey -and $appKey.GetValue('') -ceq ('"' + (Join-Path $InstallDirectory 'VTX.exe') + '" "%1"') } finally { if ($appKey) { $appKey.Dispose() } }
     foreach ($entry in $state.Values) {
+        # Older preview builds also registered Open with. A separately installed
+        # main app owns those shared values now if its open command differs.
+        $previewValue = $entry.Path -like 'Software\Classes\CLSID\*' -or $entry.Path -eq 'Software\Microsoft\Windows\CurrentVersion\PreviewHandlers' -or $entry.Path -like '*\shellex\*'
+        if (-not $previewValue -and -not $ownsOpenWith) { continue }
         $key = $root.OpenSubKey($entry.Path, $true)
         if ($null -eq $key) { continue }
         try {
@@ -47,7 +57,23 @@ foreach ($name in @('VTXPreviewHD.dll', 'VTX.exe')) {
     $destination = Join-Path $InstallDirectory $(if ($name -eq 'VTXPreviewHD.dll') { $handlerName } else { $name })
     if ((Test-Path -LiteralPath $destination) -and ((Get-FileHash -LiteralPath $source).Hash -eq (Get-FileHash -LiteralPath $destination).Hash)) { continue }
     if ($name -eq 'VTX.exe') { $rendererChanged = $true }
-    Copy-Item -LiteralPath $source -Destination $destination -Force
+    if ($name -eq 'VTX.exe' -and (Test-Path -LiteralPath $destination)) {
+        # This read-only preview worker has no unsaved document state. Close
+        # only this installation's worker before replacing its executable.
+        Get-Process -Name VTX -ErrorAction SilentlyContinue | Where-Object {
+            try { $_.Path -ieq $destination } catch { $false }
+        } | ForEach-Object {
+            Stop-Process -InputObject $_ -Force
+            if (-not $_.WaitForExit(5000)) { throw 'The previous preview worker did not exit. Close the Preview pane and try again.' }
+        }
+    }
+    for ($attempt = 0; $attempt -lt 20; $attempt++) {
+        try { Copy-Item -LiteralPath $source -Destination $destination -Force; break }
+        catch [IO.IOException] {
+            if ($attempt -eq 19) { throw }
+            Start-Sleep -Milliseconds 100
+        }
+    }
 }
 if ($rendererChanged) {
     # Only regenerate this handler revision's disposable rendered images.
@@ -82,6 +108,9 @@ $values = @(
 foreach ($extension in @('.sldprt','.sldasm','.step','.stp','.p21','.stl','.obj','.ply','.glb','.gltf','.fbx','.3mf','.ifc','.ifczip','.dxf')) {
     $values += @{Path="Software\Classes\$extension\shellex\$category"; Name=''; Installed=$clsid}
 }
+# Optionally offer the installed worker in Open with. The default preview-only
+# install leaves the main app's existing Open-with registrations alone.
+if ($RegisterOpenWith) {
 # Offer the installed viewer in Open with without changing extension defaults
 # or Windows' protected UserChoice values. Quote both executable and argument.
 # https://learn.microsoft.com/windows/win32/shell/how-to-include-an-application-on-the-open-with-dialog-box
@@ -117,6 +146,7 @@ foreach ($extension in @('.sldprt','.sldasm','.step','.stp','.p21','.stl','.obj'
     $values += @{Path="$application\SupportedTypes"; Name=$extension; Installed=''}
     $values += @{Path="Software\Classes\$extension\OpenWithProgids"; Name=$progId; Installed=''}
     $values += @{Path="$capabilities\FileAssociations"; Name=$extension; Installed=$progId}
+}
 }
 # Preserve originals, adding new registration keys and updating only the value
 # we expect to own. This also supports migration from the first preview build.
@@ -156,4 +186,4 @@ foreach ($entry in $originals | Where-Object { $_.Path -like "Software\Classes\C
 }
 }
 Notify-Explorer
-Write-Output "Installed VTX Preview and Open with registration in $InstallDirectory. VTX is available under Open with > Choose another app. Existing default apps are unchanged."
+Write-Output "Installed VTX Explorer Preview in $InstallDirectory. Enable Explorer's Preview pane with Alt+P. Existing default apps are unchanged."

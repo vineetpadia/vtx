@@ -2,7 +2,7 @@
 
 An x64, per-user `IPreviewHandler` for the Preview pane (Alt+P). Double-click file associations stay unchanged. No administrator access or Explorer restart is needed.
 
-The installer also registers **VTX** under **Open with → Choose another app** for supported model formats, including SLDPRT, SLDASM and DXF. It uses the installed `%LOCALAPPDATA%\VTXPreview\VTX.exe`, so the download/workspace location is not needed. Selecting VTX opens the interactive viewer. Existing defaults remain unchanged; Windows lets you choose whether to use VTX once or make it the default. Open-with registrations are covered by the same backup/uninstall as the preview handler. Optional IGES formats are not advertised by this installer. The folded-V icon is embedded in VTX.exe and copied as a content-hashed ICO for Windows' app chooser.
+[Download the preview package](https://github.com/vineetpadia/vtx/releases/download/preview-v0.2.1/vtx-explorer-preview-windows-x64.zip), extract the whole ZIP, then double-click **Install.cmd**. The default installation registers previews only and preserves the main VTX app's Open-with commands. The main app is installed separately. Advanced/source installations can pass `-RegisterOpenWith` to offer this installation's worker in **Open with → Choose another app** too. Double-click defaults remain unchanged. Optional IGES formats are not advertised.
 
 DXF previews use a navigable 2D view: middle-drag (or left-drag) to pan, wheel to zoom and F to fit. Native support covers common line/curve entities and block inserts. Text, dimension rendering, hatch fills and some layer flags remain incomplete. No external CAD app is launched.
 
@@ -26,7 +26,7 @@ Copy-Item ..\target\release\examples\vtx.exe .\build\VTX.exe
 .\install.ps1
 ```
 
-The Rust executable must include `--explorer-preview PARENT_HWND MODEL [CACHE_PNG]`. It validates the parent window class, matches the parent's DPI context, creates a hidden child and reports readiness to the owner. The existing `--preview MODEL OUTPUT.png` remains 1920 × 1440, and `--check` remains 768 × 512. The DLL uses the Microsoft Visual C++ x64 runtime. Installation defaults to `%LOCALAPPDATA%\VTXPreview`; images are cached in `%USERPROFILE%\AppData\LocalLow\VTX\Previews` for the standard low-integrity preview host. Startup has a 30-second timeout; live navigation stays available until selection changes. Source CAD files are read only.
+The Rust executable must include `--explorer-preview PARENT_HWND MODEL [CACHE_PNG]`. It validates the parent window class, matches the parent's DPI context, creates a hidden child and reports readiness to the owner. The existing `--preview MODEL OUTPUT.png` remains 1920 × 1440, and `--check` remains 768 × 512. Release builds include the Microsoft C runtime statically. Installation defaults to `%LOCALAPPDATA%\VTXPreview`; images are cached in `%USERPROFILE%\AppData\LocalLow\VTX\Previews` for the standard low-integrity preview host. Startup has a 30-second timeout; live navigation stays available until selection changes. Source CAD files are read only.
 
 The installer backs up each changed registry value before first registration. DLL filenames include a content hash so updating does not overwrite code loaded by an existing preview host. Restore previous handlers with:
 
@@ -34,7 +34,7 @@ The installer backs up each changed registry value before first registration. DL
 & "$env:LOCALAPPDATA\VTXPreview\install.ps1" -Uninstall
 ```
 
-Restoration skips associations changed by another installation after VTX. Files are retained to avoid unloading code from a live preview host. Supported extensions: SLDPRT, SLDASM, DXF, STEP/STP/P21, STL, OBJ, PLY, GLB/GLTF, FBX, 3MF, IFC/IFCZIP. Fusion `.f3d`, SolidWorks `.slddrw` and optional IGES are not supported by this handler.
+Restoration skips associations changed by another installation after VTX. Files are retained to avoid unloading code from a live preview host. Supported extensions: SLDPRT, SLDASM, DXF, STEP/STP/P21, STL, OBJ, PLY, GLB/GLTF, FBX, 3MF, IFC/IFCZIP. Parasolid `.x_t`/`.x_b`, Fusion `.f3d`, SolidWorks `.slddrw` and optional IGES are not supported by this handler.
 
 Sharp-image cache keys include the handler revision/resolution, source path, size, and modification time, plus relevant companions in the same folder for assemblies and linked assets. Updating VTX.exe through the installer invalidates this revision's rendered-image cache so color/geometry fixes take effect. References outside that folder are not tracked. Saved SolidWorks images show the last saved view and appearances; save in SolidWorks to refresh them. Cache contents can be removed when no preview is loading.
 

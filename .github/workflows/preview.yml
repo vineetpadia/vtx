@@ -1,0 +1,72 @@
+name: Windows Explorer preview
+
+on:
+  push:
+    tags: ['preview-v*']
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Preview release tag (for example preview-v0.2.1)'
+        required: true
+        default: 'preview-v0.2.1'
+
+permissions:
+  contents: read
+
+jobs:
+  preview:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
+    env:
+      RUSTFLAGS: '-C target-feature=+crt-static'
+      VTX_UPDATE_PRIVATE: 'false'
+      PREVIEW_RELEASE_TAG: ${{ inputs.version || github.ref_name }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Validate release version
+        run: test "$PREVIEW_RELEASE_TAG" = "preview-v$(cat VERSION)"
+      - name: Build native renderer
+        run: cargo build --manifest-path native/Cargo.toml --locked --release -p triangulate --features parallel,desktop --example vtx
+      - name: Build preview handler and run saved-image tests
+        shell: cmd
+        run: native\windows-preview\build.cmd
+      - name: Collect dependency notices
+        run: cargo metadata --manifest-path native/Cargo.toml --locked --format-version 1 --features triangulate/parallel,triangulate/desktop --filter-platform x86_64-pc-windows-msvc > dependencies.json
+      - name: Package Explorer preview
+        run: >-
+          python scripts/package_preview.py
+          --binary native/target/release/examples/vtx.exe
+          --handler native/windows-preview/build/VTXPreviewHD.dll
+          --metadata dependencies.json --version "$(cat VERSION)"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: explorer-preview
+          path: dist/*
+          if-no-files-found: error
+  publish:
+    needs: preview
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/download-artifact@v5
+        with:
+          name: explorer-preview
+          path: dist
+      - name: Publish separate preview download
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.version || github.ref_name }}
+        run: |
+          if ! gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release create "$RELEASE_TAG" --target "$GITHUB_SHA" --title 'VTX Explorer Preview' --notes-file docs/PREVIEW_RELEASE_NOTES.md --prerelease --latest=false
+          fi
+          release_sha=$(gh api "repos/$GITHUB_REPOSITORY/commits/$RELEASE_TAG" --jq '.sha')
+          test "$release_sha" = "$GITHUB_SHA"
+          gh release upload "$RELEASE_TAG" dist/* --clobber

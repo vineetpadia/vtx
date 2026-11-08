@@ -18,7 +18,7 @@ Most of VTX is LLM-generated. I built it because I was frustrated with slow 3D v
 - **Familiar navigation:** SolidWorks-style mouse controls and zoom toward the pointer.
 - **3D models and 2D drawings:** SolidWorks, STEP, STL, OBJ, PLY, glTF/GLB, FBX, 3MF, IFC, and DXF. IGES through an optional extension.
 - **Local viewing:** no model uploads or separate CAD application required.
-- **Windows extras:** background auto-updates and an optional, separately installed navigable Explorer preview.
+- **Windows extras:** background auto-updates and an optional, separately installed [navigable Explorer preview](https://github.com/vineetpadia/vtx/releases/download/preview-v0.2.1/vtx-explorer-preview-windows-x64.zip).
 
 Mesh measurements are approximate; SolidWorks appearances and DXF entities have limits. [Format and tool details →](docs/INSTALL.md#open-a-model)
 
