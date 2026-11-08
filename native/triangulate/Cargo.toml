@@ -48,6 +48,14 @@ serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["raw_value"] }
 percent-encoding = "2"
 bytemuck = "1"
+dxf = "0.6.2"
+egui = { version = "=0.32.3", features = ["bytemuck"] }
+egui-winit = { version = "=0.32.3", default-features = false, features = ["clipboard"] }
 
 [target.'cfg(windows)'.dev-dependencies]
 memmap2 = "0.9"
+velopack = "=1.2.161"
+winreg = "0.55"
+
+[target.'cfg(windows)'.build-dependencies]
+embed-resource = "3"

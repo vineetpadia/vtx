@@ -1,6 +1,7 @@
 #![cfg_attr(windows, windows_subsystem = "windows")]
 
 mod desktop;
+mod dxf_drawing;
 mod fbx_mesh;
 mod gltf_mesh;
 mod ifc_mesh;

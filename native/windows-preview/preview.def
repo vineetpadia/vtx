@@ -1,0 +1,4 @@
+LIBRARY VTXPreviewHD
+EXPORTS
+    DllGetClassObject PRIVATE
+    DllCanUnloadNow PRIVATE

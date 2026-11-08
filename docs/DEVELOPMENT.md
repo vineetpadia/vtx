@@ -17,7 +17,13 @@ VTX uses Metal on Mac, Vulkan on Linux, and Vulkan with a Direct3D 12 fallback o
 
 ## Release packages
 
-The [Desktop releases workflow](../.github/workflows/release.yml) builds Windows x64, Linux x64, Mac Apple silicon, and Mac Intel packages. Push a version tag, such as `v0.1.1`, or run the workflow with a new version. It publishes archives and SHA-256 files to GitHub Releases after all four builds succeed.
+The [Desktop releases workflow](../.github/workflows/release.yml) builds Windows x64, Linux x64, Mac Apple silicon, and Mac Intel packages. Update `VERSION` and the release notes, then push a matching version tag (for example `v0.2.0`), or run the workflow with a new version. `VTX_VERSION` embeds that exact version into the binary. It publishes archives, checksums, a Windows installer and the `releases.win.json`/full-package update feed after all four builds succeed. Publishing newer code under an existing version is rejected if its tag points to a different commit.
+
+Windows uses Velopack 1.2.161. The pipeline runs Rust tests and `scripts/test_windows_updates.py`, which upgrades an isolated portable test edition, checks its new payload/rollback copy, and rejects a corrupt package. The real user's app registrations are excluded from the test edition. Install .NET SDK 8 and `dotnet tool install vpk --version 1.2.161` for local packaging; end users do not need .NET. Pass `--vpk PATH_TO_VPK` to `scripts/package_release.py` to generate the installer/feed alongside the manual ZIP.
+
+Updates default to private `vineetpadia/vtx` releases, authenticated using the user's existing standard Windows GitHub CLI keyring login. Tokens are never compiled into artifacts or passed on command lines. `VTX_UPDATE_REPO` and `VTX_UPDATE_PRIVATE` are build-time settings for an explicitly configured alternate download repository. A public binary feed can be used while source remains private, but requires deliberate publication and matching build configuration.
+
+`vtx --update-smoke LOCAL_FEED [--apply]` is an explicit Windows lifecycle diagnostic; `--update-smoke --github` checks the compiled GitHub source with the same authentication/download code. Tests must use isolated roots and packages. Automatic checks start only after first presentation and apply only on graceful exit of the last instance of that exact main executable. The independent Explorer worker is excluded. Fast installer hooks register Open-with commands and restore only their owned values on uninstall, without writing extension defaults, UserChoice or preview-handler registration.
 
 Windows builds include the C runtime statically. Mac builds are app bundles with an ad hoc signature; distribution signing and notarization require an Apple Developer identity. Linux builds use Ubuntu 22.04 as their base. Packages include third-party notices and dependency license files. The release workflow's packaging helper is `scripts/package_release.py`.
 

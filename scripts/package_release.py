@@ -81,6 +81,9 @@ def notices(destination, metadata):
                       if path.name.lower().startswith(("license", "licence", "copying", "notice"))]
         if package.get("license_file"):
             candidates.append(directory / package["license_file"])
+        if package["name"] == "epaint_default_fonts":
+            candidates.extend((directory / "fonts").rglob("*.txt"))
+            candidates.append(directory / "README.md")
         for candidate in sorted(set(candidates)):
             files = [candidate] if candidate.is_file() else candidate.rglob("*")
             for source in files:
@@ -100,6 +103,7 @@ def main():
     parser.add_argument("--metadata", type=Path, required=True)
     parser.add_argument("--version", required=True)
     parser.add_argument("--runtime", type=Path, action="append", default=[])
+    parser.add_argument("--vpk", type=Path, help="Windows Velopack CLI: also build installer/update packages")
     parser.add_argument("--output", type=Path, default=ROOT / "dist")
     args = parser.parse_args()
     if not args.binary.is_file():
@@ -148,7 +152,10 @@ def main():
             "Mac: drag VTX.app to Applications and open it.\n"
             "Linux: extract this folder and open VTX (an executable).\n\n"
             "Drop a model into the window, or press Ctrl+O (Command+O on Mac).\n"
-            "Drag to orbit, scroll to zoom, R to reset the camera.\n"
+            "Middle-drag to rotate, Ctrl+middle-drag to pan, scroll to zoom.\n"
+            "Click edges to measure; Ctrl-click a second edge for gap and angle.\n"
+            "The Windows Setup edition downloads updates in the background\n"
+            "and installs them when the last VTX window closes.\n"
             "Keep OBJ/MTL textures and glTF companion files beside their model.\n\n"
             "Try the included demo.glb colored cube. See TESTING.txt for offline\n"
             "installation help, requirements, known limits, and feedback steps.\n\n"
@@ -162,6 +169,29 @@ def main():
         if args.platform.startswith("macos"):
             subprocess.run(["codesign", "--force", "--deep", "--sign", "-", str(app)], check=True)
             subprocess.run(["codesign", "--verify", "--deep", "--strict", str(app)], check=True)
+        if args.vpk:
+            if args.platform != "windows-x64":
+                parser.error("--vpk applies to Windows x64 only")
+            subprocess.run([str(args.vpk.resolve()), "--yes", "--skip-updates", "pack",
+                            "--packId", "VTXDesktop", "--packVersion", version,
+                            "--packTitle", "VTX", "--packAuthors", "Vineet Padia", "--runtime", "win-x64",
+                            "--packDir", str(package), "--mainExe", "VTX.exe",
+                            "--icon", str(ROOT / "assets/vtx.ico"),
+                            "--shortcuts", "StartMenuRoot", "--delta", "None",
+                            "--releaseNotes", str(ROOT / "docs/RELEASE_NOTES.md"),
+                            "--outputDir", str(args.output.resolve())], check=True)
+            setups = list(args.output.glob("*-Setup.exe"))
+            if len(setups) != 1:
+                raise RuntimeError("Expected exactly one VTX setup executable")
+            setup_name = setups[0].name
+            setups[0].replace(args.output / "VTX-Setup.exe")
+            asset_index = args.output / "assets.win.json"
+            if asset_index.is_file():
+                assets = json.loads(asset_index.read_text(encoding="utf-8-sig"))
+                for asset in assets:
+                    if asset.get("RelativeFileName") == setup_name:
+                        asset["RelativeFileName"] = "VTX-Setup.exe"
+                asset_index.write_text(json.dumps(assets), encoding="utf-8")
         if args.platform == "linux-x64":
             archive = args.output / f"{name}.tar.gz"
             with tarfile.open(archive, "w:gz") as output:
@@ -179,6 +209,12 @@ def main():
         archive.with_name(archive.name + ".sha256").write_text(
             f"{digest}  {archive.name}\n", encoding="ascii")
         print(archive)
+        if args.vpk:
+            for artifact in sorted(args.output.iterdir()):
+                if artifact.is_file() and not artifact.name.endswith(".sha256"):
+                    with artifact.open("rb") as source:
+                        digest = hashlib.file_digest(source, "sha256").hexdigest()
+                    artifact.with_name(artifact.name + ".sha256").write_text(f"{digest}  {artifact.name}\n",encoding="ascii")
 
 
 if __name__ == "__main__":

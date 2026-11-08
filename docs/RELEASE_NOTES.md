@@ -1,20 +1,29 @@
-Native VTX desktop preview for Windows, macOS, and Linux.
+VTX 0.2.0 adds compact CAD inspection tools and automatic Windows updates.
 
-This update accelerates large FBX imports with a bounded worker pool and preserves serial error diagnostics. The packages include an original colored cube (`demo.glb`) and offline testing instructions (`TESTING.txt`), so you can send the archive directly to a tester without GitHub access.
+Windows: download VTX-Setup.exe for automatic updates. Checks start after the
+first view appears, downloads run in the background, and verified packages
+install when the last main-app window closes. Use ... > Check for updates to
+check manually or restart immediately. This release is private: GitHub CLI and
+an existing GitHub login with repository access are required for downloads.
+No access token is bundled or saved by VTX. The app does not require Rust,
+Python or .NET. Windows builds remain unsigned.
 
-Download the archive for your computer, extract it, and open **VTX.exe**, **VTX.app**, or **VTX**. No Rust or Python installation is required. On Mac, drag the app into Applications. [Installation help](https://github.com/vineetpadia/vtx/blob/main/docs/INSTALL.md).
+- Pure white background, CAD shading/outlines, supported SolidWorks colors,
+  transparency, modeled labels and limited image decal projection.
+- SolidWorks-style middle-button rotation, Ctrl+middle pan, wheel zoom and Fit.
+- Hover/click recognized lines and whole curves; Ctrl-click a second edge for
+  gap, lengths and straight-line angle. Point distance, angle and snapping.
+- Diameter/radius on circular rims and recognized cylindrical walls.
+- X/Y/Z section planes, standard orientations and orthographic views.
+- DXF linework, curves and nested blocks; Open-with registration and a new icon.
 
-| Computer | Download |
-|---|---|
-| Windows x64 | `vtx-windows-x64.zip` |
-| Mac with Apple silicon | `vtx-macos-arm64.zip` |
-| Mac with Intel | `vtx-macos-x64.zip` |
-| Linux x64 | `vtx-linux-x64.tar.gz` |
+SolidWorks values use saved display meshes and are approximate. Exact native
+CAD/BREP topology, some appearances/decals and some edges remain unsupported.
+DXF circles/arcs preserve source-defined geometry. Unknown source units must
+be selected explicitly. Section cuts have no caps.
 
-Drop a model into the window, or press **Ctrl+O** (**⌘O** on Mac). Drag to orbit, scroll to zoom, **R** to reset.
+The main-app installer preserves existing file defaults. It does not install,
+replace or register Explorer preview handlers. Existing previews remain
+independent. Portable archives and third-party notices are also provided.
 
-Supports STL, OBJ, PLY, glTF/GLB, FBX, STEP, 3MF, IFC/IFCZIP, and SolidWorks saved display meshes. IGES needs the optional Open CASCADE extension and is not bundled.
-
-Preview builds are unsigned on Windows and not notarized on Mac; your OS may ask for approval on first launch. Linux needs glibc 2.35+, an X11/Wayland session, and a Vulkan driver. Each archive has a companion SHA-256 file and includes third-party license notices.
-
-Reader coverage is still evolving: some STEP surfaces fail tessellation, some FBX materials need work, and advanced material appearance is incomplete. See [benchmark coverage and verification](https://github.com/vineetpadia/vtx/blob/main/docs/BENCHMARKS.md).
+[Installation and limitations](https://github.com/vineetpadia/vtx/blob/main/docs/INSTALL.md)

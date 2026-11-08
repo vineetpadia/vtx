@@ -1,8 +1,10 @@
 __pycache__/
 *.py[cod]
 /native/target/
+/native/windows-preview/build/
 /.benchmark-models/
 /dist/
+/.vpk/
 .env
 .env.*
 !.env.example

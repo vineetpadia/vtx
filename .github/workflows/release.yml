@@ -8,7 +8,7 @@ on:
       version:
         description: 'Release version (for example v0.1.0)'
         required: true
-        default: 'v0.1.1'
+        default: 'v0.2.0'
 
 permissions:
   contents: read
@@ -44,6 +44,9 @@ jobs:
       CARGO_TERM_COLOR: always
       MACOSX_DEPLOYMENT_TARGET: '12.0'
       RELEASE_VERSION: ${{ inputs.version || github.ref_name }}
+      VTX_VERSION: ${{ inputs.version || github.ref_name }}
+      VTX_UPDATE_REPO: vineetpadia/vtx
+      VTX_UPDATE_PRIVATE: 'true'
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-python@v6
@@ -72,20 +75,43 @@ jobs:
       - name: Include the Windows C runtime
         if: runner.os == 'Windows'
         run: echo 'RUSTFLAGS=-C target-feature=+crt-static' >> "$GITHUB_ENV"
+      - name: Test desktop tools and updater
+        if: runner.os == 'Windows'
+        run: cargo test --manifest-path native/Cargo.toml --locked -p triangulate --features parallel,desktop --example vtx
+      - uses: actions/setup-dotnet@v4
+        if: runner.os == 'Windows'
+        with:
+          dotnet-version: '8.0.x'
+      - name: Install Windows release packager
+        if: runner.os == 'Windows'
+        run: dotnet tool install vpk --version 1.2.161 --tool-path .vpk
       - name: Build desktop app
         run: >-
           cargo build --manifest-path native/Cargo.toml --locked --release
           --target '${{ matrix.target }}' -p triangulate --features parallel,desktop --example vtx
+      - name: Verify real Windows update lifecycle
+        if: runner.os == 'Windows'
+        run: >-
+          python scripts/test_windows_updates.py
+          --binary 'native/target/${{ matrix.target }}/release/examples/${{ matrix.executable }}'
+          --vpk .vpk/vpk.exe --work '${{ runner.temp }}/vtx-update-tests'
       - name: Collect dependency notices
         run: >-
           cargo metadata --manifest-path native/Cargo.toml --locked --format-version 1
           --features triangulate/parallel,triangulate/desktop --filter-platform '${{ matrix.target }}'
           > dependencies.json
-      - name: Package download
+      - name: Package non-Windows download
+        if: runner.os != 'Windows'
         run: >-
           python scripts/package_release.py --platform '${{ matrix.platform }}'
           --binary 'native/target/${{ matrix.target }}/release/examples/${{ matrix.executable }}'
           --metadata dependencies.json --version "$RELEASE_VERSION"
+      - name: Package Windows installer and automatic updates
+        if: runner.os == 'Windows'
+        run: >-
+          python scripts/package_release.py --platform windows-x64
+          --binary 'native/target/${{ matrix.target }}/release/examples/${{ matrix.executable }}'
+          --metadata dependencies.json --version "$RELEASE_VERSION" --vpk .vpk/vpk.exe
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.platform }}

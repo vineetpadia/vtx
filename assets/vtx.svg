@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+  <title>VTX — folded vertex</title>
+  <rect x="8" y="8" width="240" height="240" rx="54" fill="#102331"/>
+  <path d="M44 64H87L128 160V204L107 188Z" fill="#F1F7FA"/>
+  <path d="M128 160L169 64H212L149 188L128 204Z" fill="#37DFDC"/>
+</svg>

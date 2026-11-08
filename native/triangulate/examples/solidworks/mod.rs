@@ -1,9 +1,13 @@
 // Container and display strip layout follow the format documentation and
 // sldprt-export reader credited in vendor/sldprt/NOTICE.md.
+mod appearance;
 mod assembly;
+mod bodies;
+mod decals;
 
 pub use assembly::{Assembly, PlacedMesh};
 
+use std::io::{Read, Seek, SeekFrom};
 use std::{borrow::Cow, collections::HashMap, convert::TryInto, fs, path::Path, time::Instant};
 
 use libdeflater::Decompressor;
@@ -20,10 +24,51 @@ const MAX_BLOCK: usize = 512 * 1024 * 1024;
 const MAX_TRIANGLES: usize = 32_000_000;
 const PART_WELD_INVERSE: f64 = 10_000.0;
 
-#[derive(Default)]
+/// Explorer's fast path reads the saved thumbnail without initializing a GPU
+/// or opening SolidWorks. Modern files normally keep PreviewPNG near the end.
+pub fn saved_preview(path: &Path, output: &Path) -> Result<()> {
+    let start = Instant::now();
+    let mut source = fs::File::open(path)?;
+    let length = source.metadata()?.len();
+    let tail_start = length.saturating_sub(4 * 1024 * 1024);
+    source.seek(SeekFrom::Start(tail_start))?;
+    let mut bytes = vec![0; 8];
+    source.read_to_end(&mut bytes)?;
+    let mut directory = blocks(&bytes);
+    if !directory.contains_key("PreviewPNG") && tail_start != 0 {
+        bytes = fs::read(path)?;
+        directory = blocks(&bytes);
+    }
+    let block = directory.get("PreviewPNG").ok_or("No saved PNG preview")?;
+    if block.expanded > 16 * 1024 * 1024 {
+        return Err("Saved preview is too large".into());
+    }
+    let png = block.expand()?;
+    if png.len() < 24 || !png.starts_with(b"\x89PNG\r\n\x1a\n") {
+        return Err("Invalid saved PNG preview".into());
+    }
+    let dimension = |at| u32::from_be_bytes(png[at..at + 4].try_into().unwrap());
+    if !(1..=4096).contains(&dimension(16)) || !(1..=4096).contains(&dimension(20)) {
+        return Err("Saved preview dimensions exceed the limit".into());
+    }
+    fs::write(output, &png)?;
+    println!(
+        "saved_preview_ms={:.3} bytes={}",
+        start.elapsed().as_secs_f64() * 1000.0,
+        png.len()
+    );
+    Ok(())
+}
+
+#[derive(Clone, Default)]
 pub struct Mesh {
     pub positions: Vec<Point>,
     pub triangles: Vec<Triangle>,
+    pub color: Option<appearance::Color>,
+    pub face_colors: Vec<(std::ops::Range<usize>, appearance::Color)>,
+    pub face_references: Vec<(std::ops::Range<usize>, Vec<String>)>,
+    pub decals: Vec<decals::Decal>,
+    pub incomplete_decals: bool,
 }
 
 #[derive(Clone, Copy)]
@@ -111,6 +156,8 @@ fn blocks(bytes: &[u8]) -> Blocks<'_> {
 struct Table<'a> {
     lengths: &'a [u8],
     positions: &'a [u8],
+    start: usize,
+    end: usize,
 }
 
 fn read_table(mut bytes: &[u8]) -> Option<(Table<'_>, usize)> {
@@ -144,14 +191,25 @@ fn read_table(mut bytes: &[u8]) -> Option<(Table<'_>, usize)> {
         }
         remaining = remaining.checked_sub(length as usize)?;
     }
-    (remaining == 0).then_some((Table { lengths, positions }, start_len - bytes.len()))
+    (remaining == 0).then_some((
+        Table {
+            lengths,
+            positions,
+            start: 0,
+            end: start_len - bytes.len(),
+        },
+        start_len - bytes.len(),
+    ))
 }
 
 fn tables(mut bytes: &[u8]) -> impl Iterator<Item = Table<'_>> {
     let finder = memmem::Finder::new(TABLE_MARKER);
+    let total = bytes.len();
     std::iter::from_fn(move || loop {
         bytes = &bytes[finder.find(bytes)?..];
-        if let Some((table, used)) = read_table(bytes) {
+        if let Some((mut table, used)) = read_table(bytes) {
+            table.start = total - bytes.len();
+            table.end = table.start + used;
             bytes = &bytes[used..];
             return Some(table);
         }
@@ -208,9 +266,28 @@ impl MeshBuilder {
         }
         Ok(())
     }
+
+    fn add_display_table(
+        &mut self,
+        table: Table<'_>,
+        inverse: f64,
+        color: Option<appearance::Color>,
+        references: Vec<String>,
+    ) -> Result<()> {
+        let start = self.mesh.triangles.len();
+        self.add_table(table, inverse)?;
+        let range = start..self.mesh.triangles.len();
+        if !references.is_empty() {
+            self.mesh.face_references.push((range.clone(), references));
+        }
+        if let Some(color) = color {
+            self.mesh.face_colors.push((range, color));
+        }
+        Ok(())
+    }
 }
 
-fn display_mesh(blocks: &Blocks<'_>) -> Result<Option<Mesh>> {
+fn display_mesh(blocks: &Blocks<'_>, path: &Path) -> Result<Option<Mesh>> {
     for name in ["Contents/DisplayLists", "FaceTessellations"] {
         let Some(block) = blocks.get(name) else {
             continue;
@@ -219,9 +296,37 @@ fn display_mesh(blocks: &Blocks<'_>) -> Result<Option<Mesh>> {
         let data = block.expand()?;
         let expanded = start.elapsed();
         let mut builder = MeshBuilder::default();
-        for table in tables(&data) {
-            builder.add_table(table, PART_WELD_INVERSE)?;
+        builder.mesh.color = appearance::part_color(blocks, None);
+        let tables: Vec<_> = tables(&data).collect();
+        let bounds: Vec<_> = tables
+            .iter()
+            .map(|table| (table.start, table.end))
+            .collect();
+        let body_color = appearance::sole_body_color(blocks, &data, &bounds);
+        // A saved display can cover only one body of a multi-body part.
+        // Body color belongs to those tables, never the whole-part fallback.
+        let colors = appearance::display_colors_with_body(&data, &bounds, body_color);
+        let body_colors = appearance::imported_body_colors(blocks, &data, &bounds);
+        let feature_colors = appearance::feature_colors(blocks);
+        let mut ranges = Vec::with_capacity(tables.len());
+        for (index, (table, color)) in tables.into_iter().zip(colors).enumerate() {
+            let end = bounds.get(index + 1).map_or(data.len(), |next| next.0);
+            let references = appearance::surface_references(&data[table.end..end]);
+            // Saved inherited defaults must not hide a current feature-level
+            // appearance. Distinct face-local overrides retain precedence.
+            let color = if color.is_none() || color == builder.mesh.color {
+                appearance::feature_color(&references, &feature_colors)
+                    .or(body_colors[index])
+                    .or(color)
+            } else {
+                color
+            };
+            let first = builder.mesh.triangles.len();
+            builder.add_display_table(table, PART_WELD_INVERSE, color, references)?;
+            ranges.push(first..builder.mesh.triangles.len());
         }
+        (builder.mesh.decals, builder.mesh.incomplete_decals) =
+            decals::load(blocks, path, &data, &bounds, &ranges);
         if std::env::var_os("STEPFLASH_PROFILE").is_some() {
             eprintln!("SolidWorks display phases: expand={:.2} ms, decode={:.2} ms; block_bytes={}, triangles={}",
                 expanded.as_secs_f64() * 1000.0, (start.elapsed() - expanded).as_secs_f64() * 1000.0,
@@ -232,6 +337,26 @@ fn display_mesh(blocks: &Blocks<'_>) -> Result<Option<Mesh>> {
         }
     }
     Ok(None)
+}
+
+fn load_part_appearance(path: &Path, configuration: &str) -> Option<appearance::SourceAppearance> {
+    with_blocks(path, |blocks| {
+        if !appearance::configuration_matches(blocks, configuration) {
+            return Ok(None);
+        }
+        Ok(match display_mesh(blocks, path)? {
+            Some(mesh) => Some(appearance::SourceAppearance::from_mesh(&mesh)),
+            None => appearance::configured_part_color(blocks, configuration).map(|color| {
+                appearance::SourceAppearance {
+                    color: Some(color),
+                    surfaces: HashMap::new(),
+                    visible_mesh: None,
+                }
+            }),
+        })
+    })
+    .ok()
+    .flatten()
 }
 
 fn with_blocks<T>(path: &Path, read_blocks: impl FnOnce(&Blocks<'_>) -> Result<T>) -> Result<T> {
@@ -252,7 +377,7 @@ fn with_blocks<T>(path: &Path, read_blocks: impl FnOnce(&Blocks<'_>) -> Result<T
 
 pub fn load_part(path: &Path) -> Result<Mesh> {
     with_blocks(path, |directory| {
-        display_mesh(directory)?.ok_or_else(|| {
+        display_mesh(directory, path)?.ok_or_else(|| {
         "SolidWorks file has no supported saved display geometry. Save the display mesh or export STEP.".into()
     })
     })
@@ -262,7 +387,7 @@ pub fn load_assembly(path: &Path) -> Result<Assembly> {
     with_blocks(path, |directory| match assembly::rebuild(path, directory) {
         Ok(scene) => Ok(scene),
         Err(reason) => {
-            let Some(mesh) = display_mesh(directory)? else {
+            let Some(mesh) = display_mesh(directory, path)? else {
                 return Err(reason);
             };
             if std::env::var_os("STEPFLASH_PROFILE").is_some() {
@@ -275,6 +400,9 @@ pub fn load_assembly(path: &Path) -> Result<Assembly> {
                 }],
                 issues: 1,
                 snapshot: true,
+                diagnostics: vec![format!(
+                    "Saved display snapshot; component completeness is unknown: {reason}"
+                )],
             })
         }
     })

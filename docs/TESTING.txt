@@ -1,18 +1,53 @@
 VTX - test build
 
 GET STARTED
-Windows: extract the ZIP completely and double-click VTX.exe.
+Windows: VTX-Setup.exe installs the edition with automatic updates. The plain
+ZIP remains available for manual updates; extract it and open VTX.exe.
 Mac: unzip, drag VTX.app to Applications, and open it.
 Linux: extract the archive and open the executable named VTX.
 No Rust, Python, browser, or CAD application is required.
+The Windows installer edition checks after first presentation and every six
+hours while open. Downloads run in the background; verified updates apply when
+the last main-app window closes. ... > Check for updates checks immediately.
+Private releases require GitHub CLI and gh auth login once, using an account
+with repository access. Tokens are not embedded in VTX. Offline viewing works.
+File-default identities and independently installed Explorer previews remain
+unchanged. A previous executable is kept in the installation's rollback folder.
 
 Drop demo.glb into the VTX window, or press Ctrl+O (Command+O on Mac)
 and select it. You should see a cube with differently colored faces.
 Then try one of your own models. Keep its textures and companion files together.
 
 CONTROLS
-Drag with the left mouse button to orbit. Scroll to zoom.
-R resets the camera. Ctrl+O / Command+O opens another model.
+The main window has a small Open / Measure / Section / Views toolbar.
+Hover over an edge for an orange highlight, then left-click to select it.
+Ctrl-click a second edge for minimum gap, lengths and straight-line angle.
+Ctrl-click a selected edge to remove it; click empty space to clear selections.
+M: choose Edges, Point distance, Angle or Diameter / radius.
+Diameter / radius: click a circular rim or recognized cylindrical wall for Ø/R.
+Selected edges highlight blue/green. Copy/Clear results in the same card.
+Recognized smooth curves are selected as whole paths, not tiny display segments.
+Distance/Angle can snap to recognized endpoints, midpoints and circle centers.
+S: X/Y/Z section plane with slider and flip. Esc exits tools/clears the section.
+Views: standard orientations, orthographic projection, edges and Fit.
+Only active tools show a compact panel. Model info is under the ... menu.
+Measurements are approximate mesh measurements. Unknown source units require
+an explicit choice before millimeter/inch results; no source-unit guess is made.
+SolidWorks and other tessellated formats use approximate fitted circles/edges,
+not exact CAD/BREP measurements. Native DXF circle/arc entities retain their
+source-defined geometry. Cylindrical walls need matching circular rims; sparse
+meshes, tangent seams and some split curves may not be recognized. Ellipses
+are rejected as circles. Feature analysis runs only when Measure needs it and
+is reused for subsequent selections. Hover queries use a cached screen index,
+are checked for occlusion, and stop while idle/dragging. Section cuts have no caps.
+
+Drag with the middle mouse button to orbit. Scroll to zoom.
+Ctrl+middle-drag pans; Shift+middle-drag zooms; Alt+middle-drag rolls.
+F or double-middle-click fits the current orientation. R resets and fits the view. Ctrl+O / Command+O opens another model.
+E toggles feature outlines. B switches the light/dark background.
+The default CAD view uses a pure white background, directional shading, antialiased
+outlines and closer initial framing. Outlines do not show planar triangulation.
+I opens model details, including unresolved SolidWorks component paths.
 You can also drop another model into the window.
 
 FILES TO TRY
@@ -42,7 +77,24 @@ KNOWN LIMITS
 Some STEP surfaces fail tessellation; the title reports import warnings.
 Animation, deformers, and advanced material effects are incomplete.
 Some FBX texture paths and layered materials are unsupported.
+DXF drawings use fitted 2D linework with pan, zoom, antialiasing and constant
+screen-width strokes. Common lines/curves, polylines, supported NURBS splines
+and nested block inserts are supported. Text, dimensions, hatch fills, external
+references, some layer flags and advanced entities remain incomplete. I shows
+skipped entities. The source build includes the folded-V Windows application icon.
 SolidWorks uses saved display meshes rather than reconstructing CAD geometry.
+Saved part, body and face RGB/opacity are supported where assignments resolve.
+Assemblies use persistent surface references to transfer companion-part face
+appearances without replacing cached geometry. Supported component contexts
+also preserve RGB/opacity overrides. Transparency uses weighted blending;
+refraction and multiple display states remain incomplete. Imported label/logo
+bodies retain supported owned appearances. The diagnostic projection decoder
+supports embedded/sibling PNG/JPEG, alpha and face clipping. Native screen parity
+is unverified, so Explorer starts with the saved image for image decals. Click
+the filename to switch to navigable geometry and back. Without a saved image,
+it renders available geometry. Masks, fitting, mirrors, surface/cylindrical
+mappings and material textures remain incomplete. Lighting and edge styling
+differ from SolidWorks.
 
 The licenses folder contains dependency attribution and license texts.
 On Mac it is inside VTX.app/Contents/Resources.

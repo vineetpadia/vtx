@@ -12,14 +12,14 @@ use step::step_file::StepFile;
 use wgpu::util::DeviceExt;
 
 use super::Result;
-use crate::{fbx_mesh, gltf_mesh, ifc_mesh, iges, obj, ply, solidworks, three_mf};
+use crate::{dxf_drawing, fbx_mesh, gltf_mesh, ifc_mesh, iges, obj, ply, solidworks, three_mf};
 
 type Point = [f32; 3];
 type Triangle = [u32; 3];
 
 pub const FORMATS: &[&str] = &[
     "stl", "obj", "ply", "glb", "gltf", "fbx", "step", "stp", "p21", "3mf", "sldprt", "sldasm",
-    "ifc", "ifczip", "igs", "iges",
+    "ifc", "ifczip", "igs", "iges", "dxf",
 ];
 
 #[derive(Clone)]
@@ -84,11 +84,14 @@ pub struct Texture {
 }
 
 pub struct Part {
+    pub source_positions: Option<wgpu::Buffer>,
+    pub transparent: bool,
     pub positions: wgpu::Buffer,
     pub indices: Option<wgpu::Buffer>,
     pub material: wgpu::BindGroup,
     pub count: u32,
     pub points: bool,
+    pub lines: bool,
     pub obj_corners: bool,
     pub instances: Option<Instances>,
 }
@@ -101,23 +104,32 @@ pub struct Instances {
 }
 
 pub struct Scene {
+    pub curves: Vec<dxf_drawing::Curve>,
+    pub meters_per_unit: Option<f64>,
+    pub bounds: [Point; 2],
     pub parts: Vec<Part>,
     pub center: [f32; 3],
     pub diameter: f32,
     pub triangles: usize,
     pub points: usize,
+    pub lines: usize,
+    pub plan_view: bool,
     pub issues: usize,
     pub notice: Option<&'static str>,
+    pub retain_saved_preview: bool,
+    pub diagnostics: Vec<String>,
     pub upload_ms: f64,
     pub gpu_wait_ms: f64,
 }
 
 #[derive(Default)]
 struct Style<'a> {
+    transparent: bool,
     material: Option<&'a gltf_mesh::Appearance>,
     texture: Option<&'a Texture>,
     texture_uv: Option<&'a [[f32; 2]]>,
     encoded_texture: bool,
+    decal: bool,
     colors: Option<&'a [[u8; 4]]>,
     color: Option<[u8; 4]>,
     linear_color: Option<[f32; 4]>,
@@ -176,7 +188,13 @@ impl Uploader {
         uniform[4] = u8::from(style.material.is_some() || style.linear_color.is_some()) as f32;
         uniform[5] = u8::from(has_vertex_colors) as f32;
         if has_uv {
-            uniform[6] = if style.encoded_texture { 2.0 } else { 1.0 };
+            uniform[6] = if style.decal {
+                3.0
+            } else if style.encoded_texture {
+                2.0
+            } else {
+                1.0
+            };
         }
         uniform[8..].copy_from_slice(&transform);
         let uniform = self.buffer(bytemuck::cast_slice(&uniform), wgpu::BufferUsages::UNIFORM)?;
@@ -214,11 +232,18 @@ impl Uploader {
         usage: wgpu::BufferUsages,
         write: impl FnOnce(&mut [u8]),
     ) -> Result<wgpu::Buffer> {
+        let usage = if usage.intersects(
+            wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::INDEX | wgpu::BufferUsages::STORAGE,
+        ) {
+            usage | wgpu::BufferUsages::COPY_SRC
+        } else {
+            usage
+        };
         let limits = self.device.limits();
         let size = (len as u64).next_multiple_of(wgpu::COPY_BUFFER_ALIGNMENT);
         if len == 0
             || size > limits.max_buffer_size
-            || (usage == wgpu::BufferUsages::STORAGE
+            || (usage.contains(wgpu::BufferUsages::STORAGE)
                 && size > u64::from(limits.max_storage_buffer_binding_size))
         {
             return Err("Model buffer exceeds the GPU limit".into());
@@ -463,6 +488,181 @@ impl UploadTarget {
 }
 
 impl Builder<'_> {
+    fn add_dxf(&mut self, drawing: dxf_drawing::Scene) -> Result<()> {
+        let count = drawing.segments.len();
+        let mut bytes = Vec::with_capacity(count * 28);
+        for segment in &drawing.segments {
+            for p in [segment.a, segment.b] {
+                self.include_bounds(p, p)?;
+                for value in p {
+                    bytes.extend(value.to_le_bytes());
+                }
+            }
+            bytes.extend(segment.color);
+        }
+        let gpu = self.uploader.get()?;
+        let start = Instant::now();
+        let material = gpu.bind_material(
+            &Style::default(),
+            [&gpu.empty, &gpu.empty],
+            false,
+            false,
+            [1., 1., 0., 0.],
+        )?;
+        self.scene.parts.push(Part {
+            source_positions: None,
+            transparent: false,
+            positions: gpu.buffer(&bytes, wgpu::BufferUsages::VERTEX)?,
+            indices: None,
+            material,
+            count: u32::try_from(count)?,
+            points: false,
+            lines: true,
+            obj_corners: false,
+            instances: None,
+        });
+        self.scene.lines = count;
+        self.scene.curves = drawing.curves;
+        self.scene.plan_view = true;
+        self.scene.notice = Some("2D drawing");
+        self.scene.issues += drawing.issues;
+        self.scene.diagnostics = drawing.diagnostics;
+        self.scene.upload_ms += start.elapsed().as_secs_f64() * 1000.;
+        Ok(())
+    }
+    fn add_solidworks(
+        &mut self,
+        mesh: &solidworks::Mesh,
+        instances: &[(three_mf::Instance, bool)],
+    ) -> Result<()> {
+        self.scene.retain_saved_preview |= mesh.incomplete_decals;
+        if mesh.incomplete_decals
+            && !self
+                .scene
+                .diagnostics
+                .iter()
+                .any(|s| s.contains("unresolved decals"))
+        {
+            self.scene.diagnostics.push("SolidWorks has unresolved decals; Explorer retains the saved image to preserve labels.".into());
+        }
+        let mut groups = std::collections::BTreeMap::<Option<[u8; 4]>, Vec<&[Triangle]>>::new();
+        let mut cuts = vec![0, mesh.triangles.len()];
+        let colors: std::collections::BTreeMap<_, _> = mesh
+            .face_colors
+            .iter()
+            .map(|(range, color)| {
+                cuts.extend([range.start, range.end]);
+                (range.start, (range.end, *color))
+            })
+            .collect();
+        for decal in &mesh.decals {
+            cuts.extend([decal.range.start, decal.range.end]);
+        }
+        cuts.sort_unstable();
+        cuts.dedup();
+        let mut textures = HashMap::new();
+        for cut in cuts.windows(2) {
+            let range = cut[0]..cut[1];
+            if range.is_empty() {
+                continue;
+            }
+            let color = colors
+                .range(..=range.start)
+                .next_back()
+                .filter(|(_, (end, _))| *end >= range.end)
+                .map(|(_, (_, color))| *color)
+                .or(mesh.color);
+            if let Some(decal) = mesh
+                .decals
+                .iter()
+                .find(|d| d.range.start <= range.start && d.range.end >= range.end)
+            {
+                let key = std::sync::Arc::as_ptr(&decal.image) as usize;
+                if !textures.contains_key(&key) {
+                    match self.uploader.load_base_image(&decal.image) {
+                        Ok(view) => {
+                            let gpu = self.uploader.get()?;
+                            textures.insert(
+                                key,
+                                Texture {
+                                    view,
+                                    sampler: gpu.linear_sampler(
+                                        wgpu::AddressMode::ClampToEdge,
+                                        wgpu::AddressMode::ClampToEdge,
+                                    ),
+                                },
+                            );
+                        }
+                        Err(error) => {
+                            self.scene.retain_saved_preview = true;
+                            self.scene
+                                .diagnostics
+                                .push(format!("Saved decal image could not be decoded: {error}"));
+                        }
+                    }
+                }
+                if let Some(texture) = textures.get(&key) {
+                    let uv: Vec<_> = mesh.positions.iter().map(|p| decal.uv(*p)).collect();
+                    let color = color.unwrap_or([192, 192, 192, 255]);
+                    self.add(
+                        &mesh.positions,
+                        &mesh.triangles[range],
+                        false,
+                        Style {
+                            color: Some(color),
+                            transparent: color[3] < 255,
+                            texture: Some(texture),
+                            texture_uv: Some(&uv),
+                            decal: true,
+                            instances,
+                            ..Default::default()
+                        },
+                    )?;
+                    continue;
+                }
+            }
+            groups
+                .entry(color)
+                .or_default()
+                .push(&mesh.triangles[range]);
+        }
+        if std::env::var_os("STEPFLASH_PROFILE").is_some() {
+            eprintln!(
+                "SolidWorks appearance: default={:?}, face_assignments={}, color_groups={}",
+                mesh.color,
+                mesh.face_colors.len(),
+                groups.len()
+            );
+        }
+        for (color, batches) in groups {
+            let count = batches.iter().map(|batch| batch.len()).sum();
+            if count == 0 {
+                continue;
+            }
+            if color.is_none() {
+                let message =
+                    "Some SolidWorks faces have no resolved saved appearance; using neutral gray.";
+                if !self.scene.diagnostics.iter().any(|d| d == message) {
+                    self.scene.diagnostics.push(message.into());
+                }
+            }
+            let color = color.or(Some([192, 192, 192, 255]));
+            self.add_batches(
+                &mesh.positions,
+                count,
+                batches,
+                false,
+                Style {
+                    color,
+                    transparent: color.is_some_and(|color| color[3] < 255),
+                    instances,
+                    ..Default::default()
+                },
+            )?;
+        }
+        Ok(())
+    }
+
     fn include_bounds(&mut self, min: Point, max: Point) -> Result<()> {
         for axis in 0..3 {
             if !min[axis].is_finite() || !max[axis].is_finite() {
@@ -584,11 +784,14 @@ impl Builder<'_> {
         };
         let copies = instances.as_ref().map_or(1, |batch| batch.count as usize);
         self.scene.parts.push(Part {
+            source_positions: None,
+            transparent: style.transparent,
             positions,
             indices,
             material,
             count: u32::try_from(count)?,
             points: cloud,
+            lines: false,
             obj_corners: false,
             instances,
         });
@@ -647,11 +850,14 @@ impl Builder<'_> {
             [1.0, 1.0, 0.0, 0.0],
         )?;
         self.scene.parts.push(Part {
+            source_positions: None,
+            transparent: false,
             positions,
             indices: Some(indices),
             material,
             count,
             points: false,
+            lines: false,
             obj_corners: false,
             instances: None,
         });
@@ -684,13 +890,20 @@ pub fn load(path: &Path, uploader: &UploadTarget) -> Result<Scene> {
     let mut builder = Builder {
         uploader,
         scene: Scene {
+            curves: Vec::new(),
+            meters_per_unit: None,
+            bounds: [[0.0; 3]; 2],
             parts: Vec::new(),
             center: [0.0; 3],
             diameter: 0.0,
             triangles: 0,
             points: 0,
+            lines: 0,
+            plan_view: false,
             issues: 0,
             notice: None,
+            retain_saved_preview: false,
+            diagnostics: Vec::new(),
             upload_ms: 0.0,
             gpu_wait_ms: 0.0,
         },
@@ -809,11 +1022,14 @@ pub fn load(path: &Path, uploader: &UploadTarget) -> Result<Scene> {
                             map.map_or([1.0, 1.0, 0.0, 0.0], |map| map.transform),
                         )?;
                         builder.scene.parts.push(Part {
+                            source_positions: Some(positions.clone()),
+                            transparent: false,
                             positions: corners,
                             indices: None,
                             material,
                             count,
                             points: false,
+                            lines: false,
                             obj_corners: true,
                             instances: None,
                         });
@@ -994,9 +1210,11 @@ pub fn load(path: &Path, uploader: &UploadTarget) -> Result<Scene> {
                 );
             }
         }
+        "dxf" => builder.add_dxf(dxf_drawing::load(path)?)?,
         "sldprt" => {
             let mesh = solidworks::load_part(path)?;
-            builder.add(&mesh.positions, &mesh.triangles, false, Style::default())?;
+            builder.add_solidworks(&mesh, &[])?;
+            builder.scene.diagnostics.push("SolidWorks saved appearances and supported projection decals; unresolved mappings retain the saved Explorer image.".into());
         }
         "sldasm" => {
             let scene = solidworks::load_assembly(path)?;
@@ -1008,16 +1226,10 @@ pub fn load(path: &Path, uploader: &UploadTarget) -> Result<Scene> {
                 None
             };
             builder.scene.issues += scene.issues;
+            builder.scene.diagnostics = scene.diagnostics;
+            builder.scene.diagnostics.push("SolidWorks saved appearances and supported projection decals; unresolved mappings retain the saved Explorer image.".into());
             for part in scene.meshes {
-                builder.add(
-                    &part.mesh.positions,
-                    &part.mesh.triangles,
-                    false,
-                    Style {
-                        instances: &part.instances,
-                        ..Default::default()
-                    },
-                )?;
+                builder.add_solidworks(&part.mesh, &part.instances)?;
             }
         }
         "stp" | "step" | "p21" => {
@@ -1068,8 +1280,21 @@ pub fn load(path: &Path, uploader: &UploadTarget) -> Result<Scene> {
     if builder.scene.parts.is_empty() {
         return Err("The model contains no drawable geometry".into());
     }
+    builder.scene.meters_per_unit = match path
+        .extension()
+        .and_then(|s| s.to_str())
+        .unwrap_or("")
+        .to_ascii_lowercase()
+        .as_str()
+    {
+        // The SolidWorks reader converts saved SI coordinates to millimeters.
+        "sldprt" | "sldasm" | "3mf" => Some(0.001),
+        "glb" | "gltf" => Some(1.),
+        _ => None,
+    };
     let spans = [0, 1, 2].map(|i| f64::from(builder.max[i]) - f64::from(builder.min[i]));
     builder.scene.center = [0, 1, 2].map(|i| builder.min[i] * 0.5 + builder.max[i] * 0.5);
+    builder.scene.bounds = [builder.min, builder.max];
     builder.scene.diameter = spans
         .iter()
         .map(|span| span * span)
