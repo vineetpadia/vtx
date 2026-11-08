@@ -255,7 +255,8 @@ impl Viewer {
         }
     }
     fn queue_hover(&mut self) {
-        if self.ui.is_none() || self.scene.is_none() || self.dragging.is_some() {
+        if self.ui.is_none() || self.scene.is_none() || self.dragging.is_some()
+            || self.scene.as_ref().is_some_and(|s| s.raster_size.is_some()) {
             return;
         }
         if let Some(p) = self.cursor {
@@ -1132,6 +1133,9 @@ impl ApplicationHandler<Event> for App {
                         (viewer.measure_click.take(), viewer.cursor)
                     {
                         viewer.dragging = None;
+                        if viewer.scene.as_ref().is_some_and(|s| s.raster_size.is_some()) {
+                            return;
+                        }
                         if viewer.pending_hover.take().is_some() {
                             viewer.pending_pick = None;
                         }

@@ -1004,7 +1004,8 @@ impl Ui {
         name: &str,
     ) -> Frame {
         if scene.is_some_and(|s| s.raster_size.is_some()) {
-            self.tools.measure = false; self.tools.section = false; self.tools.clear();
+            self.tools.measure = false; self.tools.section = false;
+            self.tools.edge_discovery = false; self.tools.clear();
         }
         let raw = if let (Some(state), Some(window)) = (&mut self.state, window) {
             state.take_egui_input(window)

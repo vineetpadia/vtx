@@ -7,7 +7,14 @@ pub fn load(path: &Path) -> Result<Vec<u8>> {
     if path.extension().and_then(|e| e.to_str()).is_some_and(|e| e.eq_ignore_ascii_case("f3d")) {
         return fusion(path);
     }
-    if let Ok(bytes) = crate::solidworks::saved_preview_bytes(path) { return Ok(bytes); }
+    let mut signature = [0; 8];
+    let ole = fs::File::open(path)?.read_exact(&mut signature).is_ok()
+        && signature == [0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1];
+    // OLE previews have an indexed stream. Avoid scanning the whole legacy
+    // drawing for the unrelated modern compressed-stream header first.
+    if !ole {
+        if let Ok(bytes) = crate::solidworks::saved_preview_bytes(path) { return Ok(bytes); }
+    }
     let mut file = cfb::open(path).map_err(|_| "This drawing has no readable saved preview. Native drawing geometry is not supported.")?;
     for name in ["/PreviewPNG", "/Preview"] {
         if let Ok(mut stream) = file.open_stream(name) {
