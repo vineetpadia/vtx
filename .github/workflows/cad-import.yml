@@ -1,0 +1,53 @@
+name: Standalone CAD validation
+
+on:
+  push:
+    branches: ['feat/standalone-cad']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  standalone:
+    name: CAD ${{ matrix.platform }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            platform: windows-x64
+            helper: vtx-cad-import.exe
+          - os: ubuntu-22.04
+            platform: linux-x64
+            helper: vtx-cad-import
+          - os: macos-15
+            platform: macos-arm64
+            helper: vtx-cad-import
+          - os: macos-15-intel
+            platform: macos-x64
+            helper: vtx-cad-import
+    defaults:
+      run:
+        shell: bash
+    env:
+      PIP_DISABLE_PIP_VERSION_CHECK: '1'
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Install standalone reader and freezing tools
+        run: python -m pip install -r native/cad-importer/requirements.txt
+      - name: Test drilled IGES and BREP and rejected binary input
+        run: python scripts/test_cad_importer.py
+      - name: Freeze reader without an end-user Python requirement
+        run: python scripts/build_cad_importer.py --output helper-dist --work helper-build
+      - name: Exercise frozen standalone reader
+        run: python scripts/test_cad_importer.py --helper 'helper-dist/vtx-cad-import/${{ matrix.helper }}'
+      - name: Install Linux desktop build libraries
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libxkbcommon-dev libwayland-dev libvulkan-dev
+      - name: Check native desktop on this platform
+        run: cargo check --manifest-path native/Cargo.toml --locked -p triangulate --features parallel,desktop --example vtx

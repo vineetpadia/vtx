@@ -142,7 +142,8 @@ impl Tools {
         }
     }
     pub fn picked_at(&mut self, point: Option<[f32; 3]>, context: &PickContext, scene: &Scene) {
-        if (!self.measure && !(self.edge_discovery && self.mode == Mode::Edge))
+        if scene.raster_size.is_some()
+            || (!self.measure && !(self.edge_discovery && self.mode == Mode::Edge))
             || self.serial != context.serial
         {
             self.pending = false;
@@ -247,6 +248,7 @@ impl Tools {
         }
     }
     pub fn result(&self, scene: &Scene) -> Option<String> {
+        if scene.raster_size.is_some() { return None; }
         let (scale, suffix) = self.scale(scene);
         if self.mode == Mode::Diameter {
             return self
@@ -322,7 +324,7 @@ impl Tools {
                     {
                         self.open = true;
                     }
-                    ui.add_enabled_ui(available, |ui| {
+                    ui.add_enabled_ui(available && scene.is_some_and(|s| s.raster_size.is_none()), |ui| {
                         if ui
                             .selectable_label(self.measure, "Measure")
                             .on_hover_text("Select edges or measure points · M")
@@ -739,20 +741,24 @@ impl Tools {
                     let (scale, suffix) = self.scale(scene);
                     let spans = [0, 1, 2]
                         .map(|i| f64::from(scene.bounds[1][i] - scene.bounds[0][i]) * scale);
+                    let dimensions = if let Some([w, h]) = scene.raster_size {
+                        format!("Saved image · {w} × {h} px")
+                    } else {
+                        format!("{:.2} × {:.2} × {:.2} {suffix}", spans[0], spans[1], spans[2])
+                    };
                     ui.horizontal(|ui| {
                         ui.label(
-                            RichText::new(format!(
-                                "{:.2} × {:.2} × {:.2} {suffix}",
-                                spans[0], spans[1], spans[2]
-                            ))
+                            RichText::new(dimensions)
                             .size(11.)
                             .color(Color32::from_gray(115)),
                         );
                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                             ui.label(
-                                RichText::new(
-                                    "Middle drag rotate  ·  Ctrl+middle pan  ·  Scroll zoom",
-                                )
+                                RichText::new(if scene.raster_size.is_some() {
+                                    "Middle drag pan  ·  Scroll zoom  ·  F fit"
+                                } else {
+                                    "Middle drag rotate  ·  Ctrl+middle pan  ·  Scroll zoom"
+                                })
                                 .size(11.)
                                 .color(Color32::from_gray(125)),
                             );
@@ -993,6 +999,9 @@ impl Ui {
         size: [u32; 2],
         name: &str,
     ) -> Frame {
+        if scene.is_some_and(|s| s.raster_size.is_some()) {
+            self.tools.measure = false; self.tools.section = false; self.tools.clear();
+        }
         let raw = if let (Some(state), Some(window)) = (&mut self.state, window) {
             state.take_egui_input(window)
         } else {
@@ -1097,6 +1106,7 @@ mod tests {
     }
     fn sample_scene(units: Option<f64>) -> Scene {
         Scene {
+            raster_size: None,
             curves: Vec::new(),
             meters_per_unit: units,
             bounds: [[0.; 3], [100.; 3]],
@@ -1253,6 +1263,18 @@ mod tests {
         assert_eq!(tools.result(&unknown).as_deref(), Some("25.400 units"));
         tools.source_units = Some(0.001);
         assert_eq!(tools.result(&unknown).as_deref(), Some("1.000 in"));
+    }
+    #[test]
+    fn saved_images_cannot_produce_model_measurements() {
+        let mut scene = sample_scene(Some(0.001));
+        scene.raster_size = Some([640, 480]);
+        let tools = Tools {
+            measure: true,
+            mode: Mode::Distance,
+            points: vec![[0.; 3], [25.4, 0., 0.]],
+            ..Default::default()
+        };
+        assert!(tools.result(&scene).is_none());
     }
     #[test]
     fn toolbar_click_opens_measurement_and_section_plane_tracks_bounds() {

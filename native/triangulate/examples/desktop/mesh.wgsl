@@ -144,7 +144,7 @@ fn shaded(input: VertexOut) -> vec4<f32> {
         }
     }
     if color.a < material.flags.w { discard; }
-    return vec4(color.rgb * light, color.a);
+    return vec4(color.rgb * select(light, 1.0, material.flags.x > 1.5), color.a);
 }
 
 @fragment fn surface(input: VertexOut) -> @location(0) vec4<f32> {

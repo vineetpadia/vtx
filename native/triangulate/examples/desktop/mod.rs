@@ -1,4 +1,5 @@
 mod camera;
+mod cad_import;
 mod edges;
 #[cfg(windows)]
 mod embedded;
@@ -7,6 +8,7 @@ mod model;
 mod navigation;
 mod picking;
 mod render;
+mod saved_image;
 mod ui;
 mod ui_gpu;
 mod updates;
@@ -478,6 +480,7 @@ struct App {
 
 impl App {
     fn start_load(&mut self, path: PathBuf, uploader: UploadTarget) -> std::io::Result<()> {
+        cad_import::cancel_all();
         self.current_file = Some(path.clone());
         let proxy = self.proxy.clone();
         spawn_import(path, uploader, move |loaded| {
@@ -959,6 +962,7 @@ impl ApplicationHandler<Event> for App {
         }
         match event {
             WindowEvent::CloseRequested => {
+                cad_import::cancel_all();
                 if self.preview_parent.is_none() {
                     if let Err(error) = self.updater.apply_on_exit(false, Vec::new()) {
                         eprintln!("VTX: {error}");

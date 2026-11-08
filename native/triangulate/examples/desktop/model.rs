@@ -12,14 +12,14 @@ use step::step_file::StepFile;
 use wgpu::util::DeviceExt;
 
 use super::Result;
-use crate::{dxf_drawing, fbx_mesh, gltf_mesh, ifc_mesh, iges, obj, ply, solidworks, three_mf};
+use crate::{dxf_drawing, fbx_mesh, gltf_mesh, ifc_mesh, obj, ply, solidworks, three_mf};
 
 type Point = [f32; 3];
 type Triangle = [u32; 3];
 
 pub const FORMATS: &[&str] = &[
     "stl", "obj", "ply", "glb", "gltf", "fbx", "step", "stp", "p21", "3mf", "sldprt", "sldasm",
-    "ifc", "ifczip", "igs", "iges", "dxf",
+    "ifc", "ifczip", "igs", "iges", "dxf", "x_t", "x_b", "xt", "xb", "xmt_txt", "xmt_bin", "brep", "f3d", "slddrw",
 ];
 
 #[derive(Clone)]
@@ -104,6 +104,7 @@ pub struct Instances {
 }
 
 pub struct Scene {
+    pub raster_size: Option<[u32;2]>,
     pub curves: Vec<dxf_drawing::Curve>,
     pub meters_per_unit: Option<f64>,
     pub bounds: [Point; 2],
@@ -124,6 +125,7 @@ pub struct Scene {
 
 #[derive(Default)]
 struct Style<'a> {
+    unlit: bool,
     transparent: bool,
     material: Option<&'a gltf_mesh::Appearance>,
     texture: Option<&'a Texture>,
@@ -185,7 +187,7 @@ impl Uploader {
             uniform[..4].copy_from_slice(&material.color);
             uniform[7] = material.cutoff.unwrap_or(-1.0);
         }
-        uniform[4] = u8::from(style.material.is_some() || style.linear_color.is_some()) as f32;
+        uniform[4] = if style.unlit { 2. } else { u8::from(style.material.is_some() || style.linear_color.is_some()) as f32 };
         uniform[5] = u8::from(has_vertex_colors) as f32;
         if has_uv {
             uniform[6] = if style.decal {
@@ -488,6 +490,68 @@ impl UploadTarget {
 }
 
 impl Builder<'_> {
+    fn add_saved_image(&mut self, path: &Path) -> Result<()> {
+        let bytes = super::saved_image::load(path)?;
+        let [w,h] = super::saved_image::dimensions(&bytes)?;
+        let format = image::guess_format(&bytes)?;
+        let rgba = self.uploader.decode_image(&bytes, format)?;
+        let gpu = self.uploader.get()?;
+        let texture = Texture {
+            view: gpu.upload_image(&rgba, wgpu::TextureFormat::Rgba8UnormSrgb),
+            sampler: gpu.linear_sampler(wgpu::AddressMode::ClampToEdge, wgpu::AddressMode::ClampToEdge),
+        };
+        let (x,y) = (w as f32*0.5, h as f32*0.5);
+        self.add(&[[-x,-y,0.],[x,-y,0.],[x,y,0.],[-x,y,0.]], &[[0,1,2],[0,2,3]], false,
+            Style { unlit: true, transparent: true, linear_color: Some([1.;4]),
+                texture: Some(&texture), texture_uv: Some(&[[0.,1.],[1.,1.],[1.,0.],[0.,0.]]),
+                ..Default::default() })?;
+        self.scene.plan_view = true;
+        self.scene.raster_size = Some([w,h]);
+        self.scene.notice = Some("saved image only");
+        self.scene.diagnostics.push("Saved image preview: pan and zoom are available. Native geometry, measurement and sectioning are unavailable for this document.".into());
+        Ok(())
+    }
+
+    fn add_gltf(&mut self, path: &Path) -> Result<()> {
+        gltf_mesh::with_desktop_scene(path, |mesh| {
+            let mut textures = HashMap::new();
+            for part in mesh.parts() {
+                let texture =
+                    if let Some(id) = part.appearance.and_then(|material| material.texture) {
+                        textures
+                            .entry(id)
+                            .or_insert_with(|| {
+                                let start = Instant::now();
+                                let waited = self.uploader.wait_ms();
+                                let texture = mesh.textures.get(&id)?.as_ref()?;
+                                let result = self.uploader.load_texture(texture).ok();
+                                self.scene.upload_ms += start.elapsed().as_secs_f64() * 1000.0
+                                    - (self.uploader.wait_ms() - waited);
+                                if result.is_none() {
+                                    self.scene.issues += 1;
+                                }
+                                result
+                            })
+                            .as_ref()
+                    } else {
+                        None
+                    };
+                self.triangle_part(
+                    &part.points,
+                    part.triangles,
+                    part.mirrored,
+                    Style {
+                        material: part.appearance,
+                        texture,
+                        ..Default::default()
+                    },
+                )?;
+            }
+            self.scene.issues += usize::from(mesh.incomplete_appearance);
+            Ok(())
+        })
+    }
+
     fn add_dxf(&mut self, drawing: dxf_drawing::Scene) -> Result<()> {
         let count = drawing.segments.len();
         let mut bytes = Vec::with_capacity(count * 28);
@@ -890,6 +954,7 @@ pub fn load(path: &Path, uploader: &UploadTarget) -> Result<Scene> {
     let mut builder = Builder {
         uploader,
         scene: Scene {
+            raster_size: None,
             curves: Vec::new(),
             meters_per_unit: None,
             bounds: [[0.0; 3]; 2],
@@ -1087,43 +1152,7 @@ pub fn load(path: &Path, uploader: &UploadTarget) -> Result<Scene> {
             }
             builder.scene.issues = model.issues;
         }
-        "gltf" | "glb" | "gltfpack" => gltf_mesh::with_desktop_scene(path, |mesh| {
-            let mut textures = HashMap::new();
-            for part in mesh.parts() {
-                let texture =
-                    if let Some(id) = part.appearance.and_then(|material| material.texture) {
-                        textures
-                            .entry(id)
-                            .or_insert_with(|| {
-                                let start = Instant::now();
-                                let waited = uploader.wait_ms();
-                                let texture = mesh.textures.get(&id)?.as_ref()?;
-                                let result = uploader.load_texture(texture).ok();
-                                builder.scene.upload_ms += start.elapsed().as_secs_f64() * 1000.0
-                                    - (uploader.wait_ms() - waited);
-                                if result.is_none() {
-                                    builder.scene.issues += 1;
-                                }
-                                result
-                            })
-                            .as_ref()
-                    } else {
-                        None
-                    };
-                builder.triangle_part(
-                    &part.points,
-                    part.triangles,
-                    part.mirrored,
-                    Style {
-                        material: part.appearance,
-                        texture,
-                        ..Default::default()
-                    },
-                )?;
-            }
-            builder.scene.issues += usize::from(mesh.incomplete_appearance);
-            Ok(())
-        })?,
+        "gltf" | "glb" | "gltfpack" => builder.add_gltf(path)?,
         "fbx" => {
             let mut images = HashMap::new();
             let mut textures = HashMap::new();
@@ -1174,14 +1203,16 @@ pub fn load(path: &Path, uploader: &UploadTarget) -> Result<Scene> {
             })?;
             builder.scene.issues += issues;
         }
-        "igs" | "iges" => {
-            // On Windows, loading Open CASCADE's DLLs during GPU setup delays both loaders.
-            #[cfg(windows)]
-            uploader.get()?;
-            let mesh = iges::load(path)?;
-            builder.scene.issues += mesh.skipped_faces();
-            builder.add(mesh.positions(), mesh.triangles(), false, Style::default())?;
+        "igs" | "iges" | "x_t" | "x_b" | "xt" | "xb" | "xmt_txt" | "xmt_bin" | "brep" => {
+            let converted = super::cad_import::load(path)?;
+            builder.add_gltf(&converted.path)?;
+            builder.scene.meters_per_unit = converted.report.meters_per_unit;
+            builder.scene.diagnostics.push(converted.report.notice);
+            if std::env::var_os("STEPFLASH_PROFILE").is_some() {
+                eprintln!("CAD cache_hit={}", converted.cached);
+            }
         }
+        "f3d" | "slddrw" => builder.add_saved_image(path)?,
         "ifc" | "ifczip" => {
             let model = ifc_mesh::load(path)?;
             builder.scene.issues += ifc_mesh::issues(&model);
@@ -1290,7 +1321,7 @@ pub fn load(path: &Path, uploader: &UploadTarget) -> Result<Scene> {
         // The SolidWorks reader converts saved SI coordinates to millimeters.
         "sldprt" | "sldasm" | "3mf" => Some(0.001),
         "glb" | "gltf" => Some(1.),
-        _ => None,
+        _ => builder.scene.meters_per_unit,
     };
     let spans = [0, 1, 2].map(|i| f64::from(builder.max[i]) - f64::from(builder.min[i]));
     builder.scene.center = [0, 1, 2].map(|i| builder.min[i] * 0.5 + builder.max[i] * 0.5);

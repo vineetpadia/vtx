@@ -4,6 +4,8 @@ __pycache__/
 /native/windows-preview/build/
 /.benchmark-models/
 /dist/
+/helper-dist/
+/helper-build/
 /.vpk/
 .env
 .env.*
