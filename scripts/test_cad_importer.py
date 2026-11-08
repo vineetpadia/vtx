@@ -46,7 +46,22 @@ def fixtures(folder):
     writer.SetColorMode(True)
     assert writer.Transfer(document)
     assert writer.Write(str(iges))
-    return brep, iges
+    # Exercise material counts large enough to expose whole-model vertex
+    # duplication. The source geometry is authored here, not a user model.
+    import colorsys
+    palette = folder / 'palette.iges'
+    document = TDocStd_Document(TCollection_ExtendedString('VTX palette test'))
+    shapes = XCAFDoc_DocumentTool.ShapeTool_s(document.Main())
+    colors = XCAFDoc_DocumentTool.ColorTool_s(document.Main())
+    for i in range(32):
+        box = BRepPrimAPI_MakeBox(gp_Pnt((i % 8) * 2, (i // 8) * 2, 0), 1, 1, 1).Shape()
+        label = shapes.AddShape(box, False)
+        colors.SetColor(label, Quantity_Color(*colorsys.hsv_to_rgb(i / 32, 0.8, 0.9), Quantity_TOC_sRGB), XCAFDoc_ColorGen)
+    writer = IGESCAFControl_Writer()
+    writer.SetColorMode(True)
+    assert writer.Transfer(document)
+    assert writer.Write(str(palette))
+    return brep, iges, palette
 
 
 def document(path):
@@ -144,7 +159,8 @@ def main():
     command = [str(args.helper.resolve())] if args.helper else [sys.executable, '-I', str(ROOT / 'native/cad-importer/convert.py')]
     with tempfile.TemporaryDirectory(prefix='vtx-cad-test-') as temporary:
         folder = Path(temporary)
-        sources = [*fixtures(folder), *args.parasolid]
+        generated = fixtures(folder)
+        sources = [*generated, *args.parasolid]
         for source in sources:
             output = folder / (source.name + '.glb')
             report = folder / (source.name + '.json')
@@ -154,14 +170,20 @@ def main():
             assert result['schema'] == 1 and result['success'] and result['complete']
             assert result['triangles'] > 12 and result['faces'] > 0
             doc = document(output)
-            position = doc['accessors'][0]
-            if source.suffix in {'.brep', '.iges'}:
-                span = [b - a for a, b in zip(position['min'], position['max'])]
-                assert all(abs(a - b) < 0.001 for a, b in zip(span, [20, 10, 6])), span
+            positions = [doc['accessors'][p['attributes']['POSITION']] for p in doc['meshes'][0]['primitives']]
+            assert sum(p['count'] for p in positions) == result['vertices'], 'Material groups repeat whole-model vertices'
+            if source in generated:
+                span = [max(p['max'][i] for p in positions) - min(p['min'][i] for p in positions) for i in range(3)]
+                palette = source.name == 'palette.iges'
+                expected = [15, 7, 1] if palette else [20, 10, 6]
+                assert all(abs(a - b) < 0.001 for a, b in zip(span, expected)), span
                 assert result['faces'] >= 7  # Cylinder wall must survive the import.
                 assert result['meters_per_unit'] == (0.001 if source.suffix == '.iges' else None)
                 if source.suffix == '.iges':
                     assert result['materials'] >= 2, 'IGES face/body colors were lost'
+                if palette:
+                    assert result['materials'] == 32 and result['vertices'] == 768
+                    assert result['triangles'] == 384
             print(json.dumps(dict(file=source.name, **result)))
         bad = folder / 'invalid.x_b'
         bad.write_bytes(b'not a Parasolid file')

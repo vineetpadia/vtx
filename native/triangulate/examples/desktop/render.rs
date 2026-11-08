@@ -1197,7 +1197,9 @@ pub fn bench_open(paths: &[std::path::PathBuf]) -> Result<()> {
             return Err("Successive-open check rendered a uniform background".into());
         }
         println!("{}", serde_json::json!({"file":path.file_name().map(|s| s.to_string_lossy()),"ready_ms":ready,
-            "gpu_frame_ms":frame,"triangles":scene.triangles,"lines":scene.lines,"issues":scene.issues}));
+            "gpu_frame_ms":frame,"triangles":scene.triangles,"lines":scene.lines,"issues":scene.issues,
+            "position_bytes":scene.parts.iter().map(|p| p.positions.size()).sum::<u64>(),
+            "index_bytes":scene.parts.iter().filter_map(|p| p.indices.as_ref()).map(|b| b.size()).sum::<u64>()}));
     }
     Ok(())
 }

@@ -26,6 +26,10 @@ timeout, and rejects incomplete or invalid geometry. Source files are read-only.
 Cold conversion is slower than reopening a cached mesh; no universal timing is
 claimed. A native conversion process is isolated for robustness, not sandboxed.
 
+Material groups use compact vertex spans, so adding colors does not repeat the
+whole model's vertex buffer for every material. The generated 32-color regression
+fixture contains 768 vertices in total, rather than 768 vertices per color.
+
 Real binary qualification includes two public part files from
 [42006-Technic-Model](https://github.com/Himalia13/42006-Technic-Model), with
 90/274 faces and 5,246/10,048 rendered triangles. Other real binary inputs

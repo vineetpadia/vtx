@@ -159,8 +159,8 @@ def tessellate(shape, face_color=lambda face: None):
     mesher.Perform()
     if not mesher.IsDone():
         raise ValueError('CAD tessellation failed.')
-    positions = array.array('f')
     groups = {}
+    vertices = 0
     triangles = 0
     faces = 0
     walker = TopExp_Explorer(shape, TopAbs_FACE)
@@ -173,15 +173,15 @@ def tessellate(shape, face_color=lambda face: None):
         mesh = BRep_Tool.Triangulation_s(face, location)
         if mesh is None or mesh.NbTriangles() == 0:
             raise ValueError('A CAD face could not be tessellated. No partial model was displayed.')
-        base = len(positions) // 3
-        if base + mesh.NbNodes() > MAX_VERTICES or triangles + mesh.NbTriangles() > MAX_TRIANGLES:
+        if vertices + mesh.NbNodes() > MAX_VERTICES or triangles + mesh.NbTriangles() > MAX_TRIANGLES:
             raise ValueError('CAD mesh limit exceeded.')
         color = tuple(round(c * 255) for c in (face_color(face) or (0.75, 0.77, 0.80)))
         if color not in groups:
             if len(groups) >= 4096:
                 raise ValueError('CAD material limit exceeded.')
-            groups[color] = array.array('I')
-        indices = groups[color]
+            groups[color] = (array.array('f'), array.array('I'))
+        positions, indices = groups[color]
+        base = len(positions) // 3
         transform = location.Transformation()
         for i in range(1, mesh.NbNodes() + 1):
             p = mesh.Node(i).Transformed(transform)
@@ -197,33 +197,39 @@ def tessellate(shape, face_color=lambda face: None):
                 b, c = c, b
             indices.extend((base + a - 1, base + b - 1, base + c - 1))
         triangles += mesh.NbTriangles()
+        vertices += mesh.NbNodes()
         walker.Next()
     if not triangles:
         raise ValueError('CAD file contains no drawable faces.')
-    return positions, groups, deflection, faces
+    return groups, deflection, faces, vertices
 
 
-def write_glb(path: Path, positions, groups):
-    lows = [min(positions[i::3]) for i in range(3)]
-    highs = [max(positions[i::3]) for i in range(3)]
-    if sys.byteorder != 'little':
-        positions.byteswap()
-        for indices in groups.values():
-            indices.byteswap()
-    data = bytearray(positions.tobytes())
-    views=[dict(buffer=0, byteOffset=0, byteLength=len(data), target=34962)]
-    accessors=[dict(bufferView=0, componentType=5126, count=len(positions)//3, type='VEC3', min=lows, max=highs)]
+def write_glb(path: Path, groups):
+    data = bytearray()
+    views=[];accessors=[]
     materials=[];primitives=[]
     def linear(c):
         v=c/255
         return v/12.92 if v <= 0.04045 else ((v+0.055)/1.055)**2.4
-    for color, indices in groups.items():
-        view=len(views);accessor=len(accessors);material=len(materials);encoded=indices.tobytes()
-        views.append(dict(buffer=0, byteOffset=len(data), byteLength=len(encoded), target=34963))
-        data.extend(encoded)
-        accessors.append(dict(bufferView=view, componentType=5125, count=len(indices), type='SCALAR'))
+    for color, (positions, indices) in groups.items():
+        lows = [min(positions[i::3]) for i in range(3)]
+        highs = [max(positions[i::3]) for i in range(3)]
+        if sys.byteorder != 'little':
+            positions.byteswap();indices.byteswap()
+        # Keep each material's vertex span compact. A shared whole-model
+        # POSITION accessor makes the desktop uploader repeat every vertex
+        # for each color, multiplying VRAM and upload work by material count.
+        position_accessor = len(accessors)
+        views.append(dict(buffer=0, byteOffset=len(data), byteLength=len(positions)*4, target=34962))
+        accessors.append(dict(bufferView=len(views)-1, componentType=5126, count=len(positions)//3, type='VEC3', min=lows, max=highs))
+        data.extend(positions.tobytes())
+        index_accessor = len(accessors)
+        views.append(dict(buffer=0, byteOffset=len(data), byteLength=len(indices)*4, target=34963))
+        accessors.append(dict(bufferView=len(views)-1, componentType=5125, count=len(indices), type='SCALAR'))
+        data.extend(indices.tobytes())
+        material = len(materials)
         materials.append(dict(pbrMetallicRoughness=dict(baseColorFactor=[*(linear(c) for c in color),1], metallicFactor=0, roughnessFactor=0.7)))
-        primitives.append(dict(attributes={'POSITION':0},indices=accessor,material=material))
+        primitives.append(dict(attributes={'POSITION':position_accessor},indices=index_accessor,material=material))
     doc = dict(asset=dict(version='2.0', generator='VTX standalone CAD importer'), scene=0,
         scenes=[dict(nodes=[0])], nodes=[dict(mesh=0)],
         meshes=[dict(primitives=primitives)], materials=materials,
@@ -249,12 +255,12 @@ def convert(source: Path, output: Path, report_path: Path):
             raise ValueError('CAD input exceeds 512 MiB.')
         shape, units, notice, colors = convert_shape(source)
         converted = time.perf_counter()
-        positions, groups, error, faces = tessellate(shape, colors)
+        groups, error, faces, vertices = tessellate(shape, colors)
         meshed = time.perf_counter()
-        write_glb(output, positions, groups)
+        write_glb(output, groups)
         exported = time.perf_counter()
         report = dict(schema=1, success=True, complete=True, meters_per_unit=units,
-            notice=notice, vertices=len(positions)//3, triangles=sum(len(i)//3 for i in groups.values()), materials=len(groups),
+            notice=notice, vertices=vertices, triangles=sum(len(i)//3 for _, i in groups.values()), materials=len(groups),
             faces=faces, deflection=error, elapsed_ms=(exported-start)*1000,
             phases_ms=dict(read_convert=(converted-start)*1000, mesh=(meshed-converted)*1000, export=(exported-meshed)*1000))
     except Exception as error:
