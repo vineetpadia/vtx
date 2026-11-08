@@ -8,7 +8,7 @@ on:
       version:
         description: 'Release version (for example v0.1.0)'
         required: true
-        default: 'v0.2.0'
+        default: 'v0.2.1'
 
 permissions:
   contents: read
@@ -46,7 +46,7 @@ jobs:
       RELEASE_VERSION: ${{ inputs.version || github.ref_name }}
       VTX_VERSION: ${{ inputs.version || github.ref_name }}
       VTX_UPDATE_REPO: vineetpadia/vtx
-      VTX_UPDATE_PRIVATE: 'true'
+      VTX_UPDATE_PRIVATE: 'false'
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-python@v6

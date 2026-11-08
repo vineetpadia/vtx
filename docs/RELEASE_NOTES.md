@@ -1,11 +1,13 @@
-VTX 0.2.0 adds compact CAD inspection tools and automatic Windows updates.
+VTX 0.2.1 makes the project and downloads public and removes the GitHub login
+requirement from automatic Windows updates.
 
 Windows: download VTX-Setup.exe for automatic updates. Checks start after the
 first view appears, downloads run in the background, and verified packages
 install when the last main-app window closes. Use ... > Check for updates to
-check manually or restart immediately. This release is private: GitHub CLI and
-an existing GitHub login with repository access are required for downloads.
-No access token is bundled or saved by VTX. The app does not require Rust,
+check manually or restart immediately. No GitHub account, GitHub CLI, login,
+or access token is required. Existing v0.2.0 users can run this installer once
+to switch to the public updater, or update using their existing authenticated
+installation. The app does not require Rust,
 Python or .NET. Windows builds remain unsigned.
 
 - Pure white background, CAD shading/outlines, supported SolidWorks colors,

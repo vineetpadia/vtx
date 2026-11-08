@@ -1,6 +1,6 @@
 # Install VTX
 
-[Download the latest release](https://github.com/vineetpadia/vtx/releases/latest). Choose your platform under **Assets**. The repository is private, so sign in with an account that has access. No Rust, Python, browser, or separate CAD application is needed to run VTX.
+[Download the latest release](https://github.com/vineetpadia/vtx/releases/latest). Choose your platform under **Assets**. Downloads are public; no GitHub account is needed. No Rust, Python, browser, or separate CAD application is needed to run VTX.
 
 ## Windows
 
@@ -8,7 +8,7 @@ For automatic updates, download and run **VTX-Setup.exe**. This per-user install
 
 Updates are checked after the first view appears and at six-hour intervals while VTX is open. Downloads run in the background, are hash-verified, and apply when the last window of that main app closes. Open **… → Check for updates** and choose **Check now** for an immediate check; **Restart to update** reopens the current model. A previous executable is retained in the installation's `rollback` folder. Offline or failed checks do not prevent viewing files. The rollback executable can be opened separately for recovery; updates are disabled for that copy. Reinstall a previous release to restore a complete older installation.
 
-Releases are currently private. Install [GitHub CLI](https://cli.github.com/), run `gh auth login` once using an account with access to `vineetpadia/vtx`, then use **Check for updates**. VTX reads that existing keyring login only for private release requests; no token is embedded in the executable or saved in VTX settings. GitHub CLI is not required for model viewing. The updater-enabled portable ZIP also supports updates, but the plain **vtx-windows-x64.zip** is a manual-update archive: extract it and open **VTX.exe**.
+From v0.2.1, updates download from the public GitHub release feed without GitHub CLI, a login, or an access token. If you have v0.2.0, run the latest installer once to switch to this public updater; its existing authenticated updater can also install the new version. The updater-enabled portable ZIP also supports updates, but the plain **vtx-windows-x64.zip** is a manual-update archive: extract it and open **VTX.exe**.
 
 Requires Windows 10 or newer with a Vulkan or Direct3D 12 capable GPU.
 

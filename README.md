@@ -2,11 +2,13 @@
 
 A fast, local CAD and 3D viewer. Minimal UI, clear views, familiar controls.
 
+Most of VTX is LLM-generated. I built it because I was frustrated with slow 3D viewers across different platforms and wanted something fast and straightforward for opening and inspecting models.
+
 ![VTX showing an openly licensed NEMA-17 stepper motor model](docs/media/nema17-viewer.png)
 
 **Download:** [Windows installer](https://github.com/vineetpadia/vtx/releases/latest/download/VTX-Setup.exe) · [Mac Apple silicon](https://github.com/vineetpadia/vtx/releases/latest/download/vtx-macos-arm64.zip) · [Mac Intel](https://github.com/vineetpadia/vtx/releases/latest/download/vtx-macos-x64.zip) · [Linux](https://github.com/vineetpadia/vtx/releases/latest/download/vtx-linux-x64.tar.gz)
 
-Releases are private; sign in to GitHub with repository access. [Installation help and portable downloads →](docs/INSTALL.md)
+[Installation help and portable downloads →](docs/INSTALL.md)
 
 ## Features
 

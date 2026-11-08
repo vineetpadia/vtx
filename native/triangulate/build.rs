@@ -20,7 +20,7 @@ fn main() {
     );
     println!(
         "cargo:rustc-env=VTX_UPDATE_PRIVATE={}",
-        std::env::var("VTX_UPDATE_PRIVATE").unwrap_or_else(|_| "true".into())
+        std::env::var("VTX_UPDATE_PRIVATE").unwrap_or_else(|_| "false".into())
     );
     println!("cargo:rerun-if-changed=../../assets/vtx.ico");
     #[cfg(windows)]
