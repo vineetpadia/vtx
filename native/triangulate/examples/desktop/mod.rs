@@ -1,10 +1,12 @@
 mod camera;
 mod cad_import;
 mod edges;
+mod explode;
 #[cfg(windows)]
 mod embedded;
 mod features;
 mod model;
+mod markup;
 mod navigation;
 mod picking;
 mod render;
@@ -47,6 +49,8 @@ const EMPTY_TITLE: &str = if cfg!(target_os = "macos") {
 
 struct Loaded {
     name: String,
+    path: PathBuf,
+    model_stamp: Option<(u64, std::time::SystemTime)>,
     started: Instant,
     result: std::result::Result<Scene, ImportError>,
 }
@@ -102,11 +106,14 @@ fn spawn_import<T: Send + 'static>(
     thread::Builder::new()
         .name("vtx import".into())
         .spawn(move || {
+            let model_stamp = markup::stamp(&path);
             let result = catch_unwind(AssertUnwindSafe(|| model::load(&path, &uploader)))
                 .unwrap_or_else(|_| Err("Model import failed".into()))
                 .map_err(ImportError::from);
             complete(Loaded {
                 name,
+                path,
+                model_stamp,
                 started,
                 result,
             })
@@ -261,6 +268,11 @@ impl Viewer {
         }
         if let Some(p) = self.cursor {
             let ui = self.ui.as_mut().unwrap();
+            if ui.tools.markup.placing {
+                self.hover_due = None;
+                self.hover_queue = None;
+                return;
+            }
             if ui.ctx.is_pointer_over_area() {
                 self.hover_due = None;
                 self.hover_at = None;
@@ -294,6 +306,9 @@ impl Viewer {
                 ui.tools.hovered = None;
             }
         }
+        let explode = self.camera.explode;
+        let legacy_explode = self.camera.legacy_explode;
+        let placing = self.ui.as_ref().is_some_and(|ui| ui.tools.markup.placing);
         let ui_frame = if let Some(ui) = &mut self.ui {
             Some(ui.begin(
                 Some(&self.window),
@@ -305,6 +320,27 @@ impl Viewer {
         } else {
             None
         };
+        if explode != self.camera.explode || legacy_explode != self.camera.legacy_explode {
+            self.feature_job = None;
+            self.screen_edges = None;
+            self.hover_queue = None;
+            self.pending_hover = None;
+            self.pending_pick = None;
+            self.pick_at = None;
+            self.pick_context = None;
+            if let Some(ui) = &mut self.ui {
+                ui.tools.indexing = false;
+            }
+        }
+        if placing != self.ui.as_ref().is_some_and(|ui| ui.tools.markup.placing) {
+            self.pending_pick = None;
+            self.pending_hover = None;
+            self.pick_at = None;
+            self.pick_context = None;
+            self.hover_due = None;
+            self.hover_at = None;
+            self.hover_queue = None;
+        }
         if ui_frame.as_ref().is_some_and(|frame| frame.changed) {
             self.scene_dirty = true;
         }
@@ -370,7 +406,7 @@ impl Viewer {
                 .filter(|_| {
                     self.ui
                         .as_ref()
-                        .is_some_and(|ui| ui.tools.mode == ui::Mode::Edge)
+                        .is_some_and(|ui| ui.tools.mode == ui::Mode::Edge && !ui.tools.markup.placing)
                 })
             {
                 let size = [self.config.width, self.config.height];
@@ -465,6 +501,49 @@ impl Viewer {
         self.window
             .set_title(&format!("VTX  ·  {}  ·  {}", name, message));
     }
+
+    fn confirm_discard_markup(&self) -> bool {
+        if !self.ui.as_ref().is_some_and(|ui| ui.tools.markup.unsaved()) {
+            return true;
+        }
+        rfd::MessageDialog::new()
+            .set_parent(&*self.window)
+            .set_title("Unsaved annotations")
+            .set_description("Discard unsaved annotations?")
+            .set_buttons(rfd::MessageButtons::YesNo)
+            .show() == rfd::MessageDialogResult::Yes
+    }
+
+    fn markup_action(&mut self) {
+        let Some(action) = self.ui.as_mut().and_then(|ui| ui.tools.markup.action.take()) else {
+            return;
+        };
+        if matches!(action, markup::Action::Open) && !self.confirm_discard_markup() {
+            return;
+        }
+        let markup = &mut self.ui.as_mut().unwrap().tools.markup;
+        let Some(model) = markup.model_path().map(Path::to_path_buf) else {
+            markup.message = "Open a local model before using markup files.".into();
+            self.window.request_redraw();
+            return;
+        };
+        let dialog = rfd::FileDialog::new().set_parent(&*self.window).add_filter("VTX markup", &["json"]);
+        let result = match action {
+            markup::Action::Save => {
+                let default = format!("{}.vtx-markup.json", model_name(&model));
+                dialog.set_file_name(default).save_file().map(|path| {
+                    markup.save(&model, &path).map(|()| "Annotations saved.")
+                })
+            }
+            markup::Action::Open => dialog.pick_file().zip(self.scene.as_ref()).map(|(path, scene)| {
+                markup.load(&model, &path, scene).map(|()| "Annotations loaded.")
+            }),
+        };
+        if let Some(result) = result {
+            markup.message = result.map_or_else(|error| error.to_string(), str::to_owned);
+        }
+        self.window.request_redraw();
+    }
 }
 
 struct App {
@@ -498,6 +577,9 @@ impl App {
         let Some(viewer) = self.viewer.as_ref() else {
             return;
         };
+        if !viewer.confirm_discard_markup() {
+            return;
+        }
         let name = model_name(&path);
         viewer
             .window
@@ -589,6 +671,8 @@ impl ApplicationHandler<Event> for App {
                 viewer.window.set_title(&title);
                 viewer.name = loaded.name.clone();
                 viewer.camera.clip = [0.; 4];
+                viewer.camera.explode = 0.;
+                viewer.camera.legacy_explode = false;
                 viewer.pending_pick = None;
                 viewer.pick_context = None;
                 viewer.feature_job = None;
@@ -601,6 +685,7 @@ impl ApplicationHandler<Event> for App {
                 viewer.pick_at = None;
                 if let Some(ui) = &mut viewer.ui {
                     ui.tools = ui::Tools::default();
+                    ui.tools.markup.set_model(loaded.path, loaded.model_stamp);
                 }
                 viewer.camera.fit(
                     &scene,
@@ -661,6 +746,9 @@ impl ApplicationHandler<Event> for App {
             .and_then(|v| v.ui.as_mut())
             .is_some_and(|ui| std::mem::take(&mut ui.update_restart));
         if restart {
+            if self.viewer.as_ref().is_some_and(|v| !v.confirm_discard_markup()) {
+                return;
+            }
             let args = self
                 .current_file
                 .as_ref()
@@ -685,7 +773,7 @@ impl ApplicationHandler<Event> for App {
         if let Some(viewer) = &mut self.viewer {
             if viewer.ui_enabled {
                 if let (Some(ui), Some(scene)) = (&mut viewer.ui, &viewer.scene) {
-                    if !ui.tools.needs_features()
+                    if !ui.tools.needs_features() && !ui.tools.markup.placing
                         && (viewer.feature_job.is_some()
                             || viewer.pending_pick.is_some()
                             || ui.tools.pending)
@@ -697,6 +785,7 @@ impl ApplicationHandler<Event> for App {
                         ui.tools.cancel_pending();
                     }
                     if ui.tools.needs_features()
+                        && !ui.tools.dragging_explode
                         && ui.tools.index.is_none()
                         && !ui.tools.index_failed
                         && viewer.feature_job.is_none()
@@ -778,7 +867,12 @@ impl ApplicationHandler<Event> for App {
                             } else if let (Some(ui), Some(scene), Some(context)) =
                                 (&mut viewer.ui, &viewer.scene, viewer.pick_context.take())
                             {
-                                if ui.tools.mode == ui::Mode::Edge
+                                if ui.tools.markup.placing {
+                                    if ui.tools.serial == context.serial {
+                                        ui.tools.markup.picked(point, &context.camera, scene);
+                                    }
+                                    ui.tools.pending = false;
+                                } else if ui.tools.mode == ui::Mode::Edge
                                     && ui.tools.index.is_some()
                                     && ui.tools.serial == context.serial
                                 {
@@ -822,6 +916,7 @@ impl ApplicationHandler<Event> for App {
                     viewer.hover_queue = None;
                 }
                 if viewer.hover_due.is_some_and(|due| due <= Instant::now())
+                    && viewer.ui.as_ref().is_none_or(|ui| !ui.tools.markup.placing)
                     && viewer.pending_pick.is_none()
                 {
                     let camera = &viewer.camera;
@@ -963,6 +1058,9 @@ impl ApplicationHandler<Event> for App {
         }
         match event {
             WindowEvent::CloseRequested => {
+                if !viewer.confirm_discard_markup() {
+                    return;
+                }
                 cad_import::shutdown();
                 if self.preview_parent.is_none() {
                     if let Err(error) = self.updater.apply_on_exit(false, Vec::new()) {
@@ -1001,6 +1099,7 @@ impl ApplicationHandler<Event> for App {
                         ui.tools.pending = false;
                         ui.tools.clear();
                         ui.tools.edge_discovery = false;
+                        ui.tools.markup.placing = false;
                     }
                     viewer.pending_pick = None;
                     viewer.pick_at = None;
@@ -1016,6 +1115,7 @@ impl ApplicationHandler<Event> for App {
                 if let Some(key) = event.logical_key.to_text() {
                     if key.eq_ignore_ascii_case("m") && viewer.ui.is_some() {
                         let ui = viewer.ui.as_mut().unwrap();
+                        ui.tools.markup.placing = false;
                         ui.tools.measure = !ui.tools.measure;
                         viewer.window.request_redraw();
                     } else if key.eq_ignore_ascii_case("s") && viewer.ui.is_some() {
@@ -1023,6 +1123,23 @@ impl ApplicationHandler<Event> for App {
                         ui.tools.section = !ui.tools.section;
                         viewer.scene_dirty = true;
                         viewer.window.request_redraw();
+                    } else if self.preview_parent.is_some()
+                        && (key.eq_ignore_ascii_case("s") || key.eq_ignore_ascii_case("x"))
+                    {
+                        if let Some(scene) = &viewer.scene {
+                            if key.eq_ignore_ascii_case("s") && !scene.plan_view && scene.raster_size.is_none() {
+                                viewer.camera.clip = if viewer.camera.clip[0] == 0. {
+                                    [1., 0., 0., scene.center[0]]
+                                } else {
+                                    [0.; 4]
+                                };
+                            } else if key.eq_ignore_ascii_case("x") && scene.explosion.is_some() {
+                                viewer.camera.explode = if viewer.camera.explode == 0. { 1. } else { 0. };
+                                viewer.camera.frame(scene, viewer.config.width as f32 / viewer.config.height as f32);
+                            }
+                            viewer.scene_dirty = true;
+                            viewer.window.request_redraw();
+                        }
                     } else if key.eq_ignore_ascii_case("o")
                         && self.preview_parent.is_none()
                         && !self.loading
@@ -1125,7 +1242,7 @@ impl ApplicationHandler<Event> for App {
                     if state == ElementState::Pressed {
                         viewer.measure_click = viewer.cursor;
                         if viewer.scene.as_ref().is_some_and(|s| s.plan_view)
-                            && viewer.ui.as_ref().is_some_and(|ui| !ui.tools.measure)
+                            && viewer.ui.as_ref().is_some_and(|ui| !ui.tools.measure && !ui.tools.markup.placing)
                         {
                             viewer.dragging = Some(MouseButton::Left);
                         }
@@ -1133,7 +1250,8 @@ impl ApplicationHandler<Event> for App {
                         (viewer.measure_click.take(), viewer.cursor)
                     {
                         viewer.dragging = None;
-                        if viewer.scene.as_ref().is_some_and(|s| s.raster_size.is_some()) {
+                        if viewer.scene.as_ref().is_some_and(|s| s.raster_size.is_some())
+                            && viewer.ui.as_ref().is_none_or(|ui| !ui.tools.markup.placing) {
                             return;
                         }
                         if viewer.pending_hover.take().is_some() {
@@ -1155,7 +1273,7 @@ impl ApplicationHandler<Event> for App {
                                     as u32,
                             ]);
                             if let Some(ui) = &mut viewer.ui {
-                                if !ui.tools.measure {
+                                if !ui.tools.measure && !ui.tools.markup.placing {
                                     if ui.tools.mode != ui::Mode::Edge {
                                         ui.tools.clear();
                                     }
@@ -1296,6 +1414,7 @@ impl ApplicationHandler<Event> for App {
             _ => (),
         }
         if let Some(viewer) = &mut self.viewer {
+            viewer.markup_action();
             if viewer
                 .ui
                 .as_mut()
@@ -1359,7 +1478,7 @@ pub fn run() -> Result<()> {
     if startup.as_deref().is_some_and(|arg| arg == "--ui-check") {
         let model = args
             .next()
-            .ok_or("Usage: vtx --ui-check MODEL OUTPUT.png [clean|measure|section|ortho]")?;
+            .ok_or("Usage: vtx --ui-check MODEL OUTPUT.png [clean|measure|section|section-face|ortho|explode|markup]")?;
         let output = args.next().ok_or("Missing UI screenshot output")?;
         let mode = args.next().unwrap_or_else(|| "clean".into());
         return render::inspect_check(

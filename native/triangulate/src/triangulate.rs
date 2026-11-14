@@ -91,11 +91,13 @@ fn transform_stack_roots<'a>(transform_stack: &TransformStack<'a>) -> Vec<Repres
         .flat_map(|v| v.iter())
         .map(|v| v.0)
         .collect();
-    transform_stack
+    let mut roots: Vec<_> = transform_stack
         .keys()
         .filter(|k| !children.contains(k))
         .copied()
-        .collect()
+        .collect();
+    roots.sort_unstable_by_key(|id| id.0);
+    roots
 }
 
 pub fn triangulate(s: &StepFile) -> (Mesh, Stats) {
@@ -222,7 +224,14 @@ pub fn triangulate(s: &StepFile) -> (Mesh, Stats) {
                 // Build copies of the mesh by copying and applying transforms
                 let v_end = mesh.verts.len();
                 let t_end = mesh.triangles.len();
-                for (mat, inherited) in &placements[1..] {
+                if t_start != t_end {
+                    mesh.bodies.push(mesh::PlacedBody {
+                        entity: id.0, placement: 0, vertices: v_start..v_end, triangles: t_start..t_end,
+                    });
+                }
+                for (placement, (mat, inherited)) in placements.iter().enumerate().skip(1) {
+                    let copy_v = mesh.verts.len();
+                    let copy_t = mesh.triangles.len();
                     let fallback = inherited.unwrap_or(DEFAULT_COLOR);
                     mesh.has_colors |= inherited.is_some();
                     for v in v_start..v_end {
@@ -242,6 +251,12 @@ pub fn triangulate(s: &StepFile) -> (Mesh, Stats) {
                         let mut tri = mesh.triangles[t];
                         tri.verts.add_scalar_mut(offset as u32);
                         mesh.triangles.push(tri);
+                    }
+                    if t_start != t_end {
+                        mesh.bodies.push(mesh::PlacedBody {
+                            entity: id.0, placement, vertices: copy_v..mesh.verts.len(),
+                            triangles: copy_t..mesh.triangles.len(),
+                        });
                     }
                 }
 

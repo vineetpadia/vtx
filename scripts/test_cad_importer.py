@@ -170,7 +170,8 @@ def main():
             assert result['schema'] == 1 and result['success'] and result['complete']
             assert result['triangles'] > 12 and result['faces'] > 0
             doc = document(output)
-            positions = [doc['accessors'][p['attributes']['POSITION']] for p in doc['meshes'][0]['primitives']]
+            positions = [doc['accessors'][p['attributes']['POSITION']]
+                         for mesh in doc['meshes'] for p in mesh['primitives']]
             assert sum(p['count'] for p in positions) == result['vertices'], 'Material groups repeat whole-model vertices'
             if source in generated:
                 span = [max(p['max'][i] for p in positions) - min(p['min'][i] for p in positions) for i in range(3)]
@@ -184,6 +185,7 @@ def main():
                 if palette:
                     assert result['materials'] == 32 and result['vertices'] == 768
                     assert result['triangles'] == 384
+                    assert len(doc['nodes']) == 32, 'Assembly component boundaries were lost'
             print(json.dumps(dict(file=source.name, **result)))
         bad = folder / 'invalid.x_b'
         bad.write_bytes(b'not a Parasolid file')

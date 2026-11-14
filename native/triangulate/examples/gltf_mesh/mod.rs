@@ -201,6 +201,7 @@ pub struct SceneMesh<'a> {
 }
 
 pub struct Part<'a> {
+    pub node: usize,
     pub points: Cow<'a, [Point]>,
     pub triangles: &'a [Triangle],
     pub mirrored: bool,
@@ -221,7 +222,7 @@ impl SceneMesh<'_> {
     }
 
     pub fn parts(&self) -> impl Iterator<Item = Part<'_>> + '_ {
-        self.instances.iter().flat_map(move |(index, world)| {
+        self.instances.iter().enumerate().flat_map(move |(node, (index, world))| {
             self.meshes[*index].as_ref().unwrap().iter().map(move |primitive| {
                 let points = if *world == Mat4::identity() {
                     Cow::Borrowed(primitive.points.as_ref())
@@ -232,9 +233,13 @@ impl SceneMesh<'_> {
                     }).collect())
                 };
                 let mirrored = world.fixed_slice::<3, 3>(0, 0).determinant() < 0.0;
-                Part { points, triangles: &primitive.triangles, mirrored, appearance: primitive.appearance.as_ref() }
+                Part { node, points, triangles: &primitive.triangles, mirrored, appearance: primitive.appearance.as_ref() }
             })
         })
+    }
+
+    pub fn node_count(&self) -> usize {
+        self.instances.len()
     }
 }
 

@@ -7,7 +7,7 @@ use super::{
     spawn_import, Result,
 };
 
-const DEPTH: wgpu::TextureFormat = wgpu::TextureFormat::Depth24Plus;
+const DEPTH: wgpu::TextureFormat = wgpu::TextureFormat::Depth24PlusStencil8;
 pub use super::camera::Camera;
 
 pub struct Renderer {
@@ -15,6 +15,8 @@ pub struct Renderer {
     tool_pipelines: [std::cell::OnceCell<GeometryPipelines>; 3],
     mesh_layout: wgpu::PipelineLayout,
     mesh_shader: wgpu::ShaderModule,
+    section_pipelines: std::cell::OnceCell<SectionPipelines>,
+    explode_guides: std::cell::RefCell<Option<(wgpu::Buffer, u32)>>,
     pub uploader: Uploader,
     pub(super) camera: wgpu::Buffer,
     pub(super) camera_group: wgpu::BindGroup,
@@ -28,6 +30,78 @@ pub struct Renderer {
     style_pipeline: wgpu::RenderPipeline,
     antialias: wgpu::RenderPipeline,
     style_targets: std::cell::RefCell<Option<StyleTargets>>,
+}
+
+struct SectionPipelines {
+    mask: wgpu::RenderPipeline,
+    mask_obj: wgpu::RenderPipeline,
+    cap: wgpu::RenderPipeline,
+    clear: wgpu::RenderPipeline,
+}
+
+impl SectionPipelines {
+    fn new(device: &wgpu::Device, format: wgpu::TextureFormat, layout: &wgpu::PipelineLayout, shader: &wgpu::ShaderModule) -> Self {
+        use wgpu::{CompareFunction as Compare, StencilOperation as Op};
+        let face = |compare, operation| wgpu::StencilFaceState {
+            compare,
+            fail_op: Op::Keep,
+            depth_fail_op: Op::Keep,
+            pass_op: operation,
+        };
+        let pipeline = |vertex, fragment, buffers: &[wgpu::VertexBufferLayout<'_>], stencil_front, stencil_back, cap| {
+            device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                label: Some(vertex),
+                layout: Some(layout),
+                vertex: wgpu::VertexState {
+                    module: shader,
+                    entry_point: Some(vertex),
+                    compilation_options: wgpu::PipelineCompilationOptions {
+                        constants: &[("PROJECTION", 2.)],
+                        ..Default::default()
+                    },
+                    buffers,
+                },
+                primitive: Default::default(),
+                depth_stencil: Some(wgpu::DepthStencilState {
+                    format: DEPTH,
+                    depth_write_enabled: cap,
+                    depth_compare: if cap { Compare::LessEqual } else { Compare::Always },
+                    stencil: wgpu::StencilState { front: stencil_front, back: stencil_back, read_mask: 255, write_mask: if cap { 0 } else { 255 } },
+                    bias: Default::default(),
+                }),
+                multisample: Default::default(),
+                fragment: Some(wgpu::FragmentState {
+                    module: shader,
+                    entry_point: Some(fragment),
+                    compilation_options: wgpu::PipelineCompilationOptions {
+                        constants: &[("PROJECTION", 2.)],
+                        ..Default::default()
+                    },
+                    targets: &[Some(wgpu::ColorTargetState {
+                        format, blend: None,
+                        write_mask: if cap { wgpu::ColorWrites::ALL } else { wgpu::ColorWrites::empty() },
+                    })],
+                }),
+                multiview: None,
+                cache: None,
+            })
+        };
+        let front = face(Compare::Always, Op::DecrementWrap);
+        let back = face(Compare::Always, Op::IncrementWrap);
+        let test = face(Compare::NotEqual, Op::Keep);
+        let clear = face(Compare::Always, Op::Zero);
+        Self {
+            mask: pipeline("vertex", "section_mask", &[
+                wgpu::VertexBufferLayout { array_stride: 12, step_mode: wgpu::VertexStepMode::Vertex, attributes: &wgpu::vertex_attr_array![0 => Float32x3] },
+                wgpu::VertexBufferLayout { array_stride: 48, step_mode: wgpu::VertexStepMode::Instance, attributes: &wgpu::vertex_attr_array![1 => Float32x4, 2 => Float32x4, 3 => Float32x4] },
+            ], front, back, false),
+            mask_obj: pipeline("obj_vertex", "section_mask", &[
+                wgpu::VertexBufferLayout { array_stride: 8, step_mode: wgpu::VertexStepMode::Vertex, attributes: &wgpu::vertex_attr_array![0 => Uint32x2] },
+            ], front, back, false),
+            cap: pipeline("section_quad", "section_cap", &[], test, test, true),
+            clear: pipeline("section_quad", "section_clear", &[], clear, clear, false),
+        }
+    }
 }
 
 struct GeometryPipelines {
@@ -549,6 +623,8 @@ impl Renderer {
             tool_pipelines: std::array::from_fn(|_| std::cell::OnceCell::new()),
             mesh_layout: pipeline_layout,
             mesh_shader: shader,
+            section_pipelines: Default::default(),
+            explode_guides: Default::default(),
             uploader: Uploader {
                 device,
                 queue,
@@ -625,6 +701,35 @@ impl Renderer {
         aspect: f32,
         size: [u32; 2],
     ) {
+        if let Some(explosion) = scene.and_then(|scene| scene.explosion.as_ref()) {
+            explosion.apply(&self.uploader.queue, camera.explode, camera.legacy_explode);
+        }
+        let mut guides = self.explode_guides.borrow_mut();
+        let segments = scene.and_then(|scene| scene.explosion.as_ref())
+            .filter(|_| camera.explode > 0. && !camera.legacy_explode)
+            .map(|explosion| explosion.guides(camera.explode));
+        if let Some(segments) = segments.filter(|segments| !segments.is_empty()) {
+            let mut bytes = Vec::with_capacity(segments.len() * 28);
+            for &(start, end) in &segments {
+                bytes.extend_from_slice(bytemuck::cast_slice(&[start, end]));
+                bytes.extend_from_slice(&[119, 144, 159, 255]);
+            }
+            let bytes_len = bytes.len() as u64;
+            if guides.as_ref().is_none_or(|(buffer, _)| buffer.size() < bytes_len) {
+                *guides = Some((self.uploader.device.create_buffer(&wgpu::BufferDescriptor {
+                    label: Some("VTX explode guide lines"),
+                    size: bytes_len,
+                    usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+                    mapped_at_creation: false,
+                }), 0));
+            }
+            if let Some((buffer, count)) = guides.as_mut() {
+                self.uploader.queue.write_buffer(buffer, 0, &bytes);
+                *count = segments.len() as u32;
+            }
+        } else if let Some((_, count)) = guides.as_mut() {
+            *count = 0;
+        }
         let mut cache = self.style_targets.borrow_mut();
         if cache.as_ref().is_none_or(|targets| targets.size != size) {
             let view = |format| {
@@ -711,7 +816,7 @@ impl Renderer {
             });
         }
         let targets = cache.as_ref().unwrap();
-        self.draw_scene(encoder, &targets.scene, depth, scene, camera, aspect, size);
+        self.draw_scene(encoder, &targets.scene, depth, scene, camera, aspect, size, guides.as_ref());
         let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("VTX feature edge geometry"),
             color_attachments: &[Some(wgpu::RenderPassColorAttachment {
@@ -729,7 +834,7 @@ impl Renderer {
                     load: wgpu::LoadOp::Clear(1.0),
                     store: wgpu::StoreOp::Discard,
                 }),
-                stencil_ops: None,
+            stencil_ops: None,
             }),
             ..Default::default()
         });
@@ -813,6 +918,7 @@ impl Renderer {
         camera: &Camera,
         aspect: f32,
         size: [u32; 2],
+        guides: Option<&(wgpu::Buffer, u32)>,
     ) {
         let flags = [
             aspect,
@@ -853,6 +959,17 @@ impl Renderer {
                 .queue
                 .write_buffer(&self.camera, 0, bytemuck::cast_slice(&data));
         }
+        let section = scene.is_some_and(|scene| {
+            let normal = nalgebra_glm::vec3(camera.clip[0], camera.clip[1], camera.clip[2]);
+            if normal.norm_squared() < 0.5 || scene.plan_view || scene.raster_size.is_some() {
+                return false;
+            }
+            let eye = nalgebra_glm::quat_rotate_vec3(&nalgebra_glm::quat_conjugate(&camera.rotation), &nalgebra_glm::vec3(0., 0., 1.));
+            let alignment = normal.dot(&eye);
+            let origin = nalgebra_glm::Vec3::from(scene.center) + nalgebra_glm::Vec3::from(camera.pan);
+            let scale = 0.9 * aspect.min(1.) * camera.zoom / scene.diameter;
+            if camera.orthographic { alignment > 1e-5 } else { normal.dot(&origin) + alignment * 4. / scale > camera.clip[3] }
+        });
         let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("VTX frame"),
             color_attachments: &[Some(wgpu::RenderPassColorAttachment {
@@ -870,12 +987,25 @@ impl Renderer {
                     load: wgpu::LoadOp::Clear(1.0),
                     store: wgpu::StoreOp::Store,
                 }),
-                stencil_ops: None,
+                stencil_ops: section.then_some(wgpu::Operations {
+                    load: wgpu::LoadOp::Clear(0),
+                    store: wgpu::StoreOp::Discard,
+                }),
             }),
             ..Default::default()
         });
         if let Some(scene) = scene {
             self.draw_parts(&mut pass, scene, false, false, camera);
+            if section {
+                self.draw_section(&mut pass, scene, camera);
+            }
+            if let Some((buffer, count)) = guides.filter(|(_, count)| *count != 0) {
+                pass.set_pipeline(&self.geometry_for(camera).lines);
+                pass.set_bind_group(0, &self.camera_group, &[]);
+                pass.set_bind_group(1, &scene.parts[0].material, &[]);
+                pass.set_vertex_buffer(0, buffer.slice(..));
+                pass.draw(0..6, 0..*count);
+            }
         }
         drop(pass);
         let Some(scene) = scene.filter(|scene| scene.parts.iter().any(|part| part.transparent))
@@ -971,6 +1101,76 @@ impl Renderer {
         });
         pass.set_pipeline(&self.composite);
         pass.set_bind_group(0, &targets.group, &[]);
+        pass.draw(0..3, 0..1);
+    }
+
+    fn draw_section<'a>(&'a self, pass: &mut wgpu::RenderPass<'a>, scene: &'a Scene, camera: &Camera) {
+        let pipelines = self.section_pipelines.get_or_init(|| {
+            SectionPipelines::new(&self.uploader.device, self.format, &self.mesh_layout, &self.mesh_shader)
+        });
+        pass.set_stencil_reference(0);
+        let axis = camera.clip[..3].iter().position(|v| v.abs() > 0.5).unwrap();
+        let cut = camera.clip[3] / camera.clip[axis];
+        let mut bodies = std::collections::BTreeMap::<usize, Vec<_>>::new();
+        for part in scene.parts.iter().filter(|part| !part.points && !part.lines) {
+            let count = part.instances.as_ref().map_or(1, |batch| batch.count);
+            for instance in 0..count {
+                if let Some(body) = part.instances.as_ref().and_then(|batch| batch.components.get(instance as usize)) {
+                    bodies.entry(*body).or_default().push((part, instance));
+                } else {
+                    let [lo, hi] = part.instances.as_ref().map_or(part.bounds, |batch| batch.bounds[instance as usize]);
+                    if lo[axis] < cut && cut < hi[axis] {
+                        self.draw_section_body(pass, pipelines, &[(part, instance)]);
+                    }
+                }
+            }
+        }
+        for (id, body) in bodies {
+            let shift = scene.explosion.as_ref().map_or(0., |explosion| {
+                explosion.displacement(id, axis, camera.explode, camera.legacy_explode)
+            });
+            let mut lo = f32::INFINITY;
+            let mut hi = f32::NEG_INFINITY;
+            for (part, instance) in &body {
+                let bounds = part.instances.as_ref().unwrap().bounds[*instance as usize];
+                lo = lo.min(bounds[0][axis]);
+                hi = hi.max(bounds[1][axis]);
+            }
+            if lo + shift < cut && cut < hi + shift {
+                self.draw_section_body(pass, pipelines, &body);
+            }
+        }
+    }
+
+    fn draw_section_body<'a>(
+        &'a self,
+        pass: &mut wgpu::RenderPass<'a>,
+        pipelines: &'a SectionPipelines,
+        body: &[(&'a super::model::Part, u32)],
+    ) {
+        pass.set_bind_group(0, &self.camera_group, &[]);
+        for &(part, instance) in body {
+                pass.set_bind_group(1, &part.material, &[]);
+                pass.set_pipeline(if part.obj_corners { &pipelines.mask_obj } else { &pipelines.mask });
+                pass.set_vertex_buffer(0, part.positions.slice(..));
+                if !part.obj_corners {
+                    let transforms = part.instances.as_ref().map_or(&self.identity, |batch| &batch.transforms);
+                    pass.set_vertex_buffer(1, transforms.slice(..));
+                }
+                if let Some(indices) = &part.indices {
+                    let indices = part.instances.as_ref().filter(|batch| instance >= batch.positive_count)
+                        .and_then(|batch| batch.mirrored_indices.as_ref()).unwrap_or(indices);
+                    pass.set_index_buffer(indices.slice(..), wgpu::IndexFormat::Uint32);
+                    pass.draw_indexed(0..part.count, 0, instance..instance + 1);
+                } else {
+                    pass.draw(0..part.count, instance..instance + 1);
+                }
+        }
+        let material = body.iter().max_by_key(|(part, _)| part.count).unwrap().0;
+        pass.set_bind_group(1, &material.material, &[]);
+        pass.set_pipeline(&pipelines.cap);
+        pass.draw(0..3, 0..1);
+        pass.set_pipeline(&pipelines.clear);
         pass.draw(0..3, 0..1);
     }
 
@@ -1273,6 +1473,18 @@ pub fn inspect_check(path: &Path, output: &Path, mode: &str) -> Result<()> {
     let depth = renderer.depth(width, height);
     let mut camera = Camera::default();
     camera.fit(&scene, width as f32 / height as f32);
+    if mode == "section-face" {
+        camera.look_at_cut(2, false);
+        camera.frame(&scene, width as f32 / height as f32);
+        camera.clip = [0., 0., 1., scene.center[2]];
+    }
+    if mode == "explode" || mode == "explode-markup" {
+        if scene.explosion.is_none() {
+            return Err("Explode check needs an assembly with separate components".into());
+        }
+        camera.explode = 0.85;
+        camera.frame(&scene, width as f32 / height as f32);
+    }
     let mut encoder = device.create_command_encoder(&Default::default());
     renderer.draw(
         &mut encoder,
@@ -1284,17 +1496,59 @@ pub fn inspect_check(path: &Path, output: &Path, mode: &str) -> Result<()> {
         [width, height],
     );
     queue.submit([encoder.finish()]);
+    if mode == "explode" || mode == "explode-markup" {
+        let exploded = read_rgba(device, queue, &texture, width, height)?;
+        let mut assembled = Camera { explode: 0., ..camera.clone() };
+        assembled.frame(&scene, width as f32 / height as f32);
+        let mut encoder = device.create_command_encoder(&Default::default());
+        renderer.draw(&mut encoder, &view, &depth, Some(&scene), &assembled,
+            width as f32 / height as f32, [width, height]);
+        queue.submit([encoder.finish()]);
+        let baseline = read_rgba(device, queue, &texture, width, height)?;
+        for amount in [camera.explode, 0., camera.explode] {
+            let (view_camera, expected) = if amount == 0. { (&assembled, &baseline) } else { (&camera, &exploded) };
+            let mut encoder = device.create_command_encoder(&Default::default());
+            renderer.draw(&mut encoder, &view, &depth, Some(&scene), view_camera,
+                width as f32 / height as f32, [width, height]);
+            queue.submit([encoder.finish()]);
+            if read_rgba(device, queue, &texture, width, height)? != *expected {
+                return Err("Changing explode position did not restore the expected geometry".into());
+            }
+        }
+    }
     let mut ui = Ui::headless(device, format);
     ui.tools.measure = mode == "measure";
     if mode == "measure" {
         ui.tools.mode = super::ui::Mode::Distance;
     }
-    ui.tools.section = mode == "section";
+    ui.tools.section = matches!(mode, "section" | "section-face");
+    if mode == "section-face" {
+        ui.tools.axis = 2;
+    }
     if mode == "ortho" {
         camera.orthographic = true;
         camera.frame(&scene, width as f32 / height as f32);
     }
     let mut picked = 0;
+    if mode == "markup" || mode == "explode-markup" {
+        let pixels = read_rgba(device, queue, &texture, width, height)?;
+        let picker = Picker::new(&renderer);
+        let mut point = None;
+        for y in (height / 4..height * 3 / 4).step_by(13) {
+            for x in (width / 5..width * 3 / 4).step_by(13) {
+                let pixel = ((y * width + x) * 4) as usize;
+                if pixels[pixel..pixel + 3].iter().all(|v| *v > 246) { continue; }
+                let pending = picker.begin(&renderer, &scene, [width, height], [x, y]);
+                device.poll(wgpu::PollType::Wait)?;
+                point = pending.poll(device)?.flatten();
+                if point.is_some() { break; }
+            }
+            if point.is_some() { break; }
+        }
+        ui.tools.markup.verify_round_trip(path, &output.with_extension("vtx-markup.json"),
+            point.ok_or("Could not pick an annotation anchor")?, &camera, &scene)?;
+        picked += 1;
+    }
     if mode == "diameter"
         || mode == "cylinder"
         || mode == "edge"

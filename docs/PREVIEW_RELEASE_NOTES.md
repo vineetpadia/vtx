@@ -8,7 +8,9 @@ previous preview handlers.
 
 SolidWorks saved images appear first, then a navigable GPU view loads in the
 same pane. Cached images cover later selections. Middle-drag rotates,
-Ctrl+middle-drag pans, scroll zooms, and F fits. DXF uses a 2D view.
+Ctrl+middle-drag pans, scroll zooms, and F fits. With the live model focused,
+S toggles a center section and X toggles the exploded view on assemblies.
+DXF uses a 2D view.
 
 This is a separate, unsigned Windows x64 preview package. Main-app automatic
 updates do not update it. Parasolid X_T/X_B, IGES, F3D, and SLDDRW are not

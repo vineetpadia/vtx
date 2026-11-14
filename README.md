@@ -13,7 +13,9 @@ Most of VTX is LLM-generated. I built it because I was frustrated with slow 3D v
 ## Features
 
 - **Measure:** select lines and curves; compare edge gaps, lengths, and angles. Measure point distances, XYZ offsets, diameters, and radii, with snapping and mm/inch display.
-- **Section:** slide an X, Y, or Z cutting plane through a model.
+- **Section:** slice along X, Y, or Z with hatched, body-colored cut faces. Flip the cut or look straight at it.
+- **Explode** separates assembly components with a slider and uses their geometry to choose paths and spacing. Use **Assemble** to return them to their original positions.
+- **Annotate** adds text callouts to model surfaces and drawing views. Save and reopen notes and their views in a separate `.vtx-markup.json` file.
 - **Clear CAD views:** white background, edge outlines, supported colors, transparency, and labels. Standard views and orthographic projection.
 - **Familiar navigation:** SolidWorks-style mouse controls and zoom toward the pointer.
 - **3D models and 2D drawings:** SolidWorks, STEP, STL, OBJ, PLY, glTF/GLB, FBX, 3MF, IFC, and DXF. IGES through an optional extension.

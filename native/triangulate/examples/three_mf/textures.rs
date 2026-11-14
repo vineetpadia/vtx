@@ -274,6 +274,7 @@ impl Run {
             (None, Some(colors), None)
         };
         Ok(Mesh {
+            component_start: 0,
             points,
             triangles: indices,
             color,

@@ -93,6 +93,7 @@ pub struct Part {
     pub points: bool,
     pub lines: bool,
     pub obj_corners: bool,
+    pub bounds: [Point; 2],
     pub instances: Option<Instances>,
 }
 
@@ -101,9 +102,12 @@ pub struct Instances {
     pub count: u32,
     pub positive_count: u32,
     pub mirrored_indices: Option<wgpu::Buffer>,
+    pub components: Vec<usize>,
+    pub bounds: Vec<[Point; 2]>,
 }
 
 pub struct Scene {
+    pub explosion: Option<super::explode::Explosion>,
     pub raster_size: Option<[u32;2]>,
     pub curves: Vec<dxf_drawing::Curve>,
     pub meters_per_unit: Option<f64>,
@@ -123,6 +127,12 @@ pub struct Scene {
     pub gpu_wait_ms: f64,
 }
 
+impl Scene {
+    pub fn exploded_bounds(&self, amount: f32, legacy: bool) -> [Point; 2] {
+        self.explosion.as_ref().map_or(self.bounds, |explosion| explosion.bounds(self.bounds, amount, legacy))
+    }
+}
+
 #[derive(Default)]
 struct Style<'a> {
     unlit: bool,
@@ -136,6 +146,7 @@ struct Style<'a> {
     color: Option<[u8; 4]>,
     linear_color: Option<[f32; 4]>,
     instances: &'a [(three_mf::Instance, bool)],
+    components: Option<&'a [usize]>,
 }
 
 struct Builder<'a> {
@@ -143,6 +154,8 @@ struct Builder<'a> {
     scene: Scene,
     min: Point,
     max: Point,
+    components: Vec<Option<[Point; 2]>>,
+    placements: Vec<super::explode::PlacementBatch>,
 }
 
 fn point_bounds(points: &[Point]) -> Result<(Point, Point)> {
@@ -176,6 +189,7 @@ impl Uploader {
         let texture = style.texture.filter(|_| has_uv).unwrap_or(&self.white);
         let mut uniform = [
             0.33f32, 0.75, 0.95, 1.0, 0.0, 0.0, 0.0, -1.0, 1.0, 1.0, 0.0, 0.0,
+            0.0, 0.0, 0.0, 0.0,
         ];
         if let Some(color) = style.color {
             uniform[..4].copy_from_slice(&color.map(|value| f32::from(value) / 255.0));
@@ -198,7 +212,17 @@ impl Uploader {
                 1.0
             };
         }
-        uniform[8..].copy_from_slice(&transform);
+        uniform[8..12].copy_from_slice(&transform);
+        if let Some(colors) = style.colors.filter(|colors| !colors.is_empty()) {
+            let mut sum = [0.; 3];
+            let mut count = 0.;
+            for color in colors.iter().step_by(colors.len().div_ceil(128)) {
+                for axis in 0..3 { sum[axis] += f32::from(color[axis]); }
+                count += 1.;
+            }
+            uniform[12..15].copy_from_slice(&sum.map(|channel| channel / (255. * count)));
+            uniform[15] = 1.;
+        }
         let uniform = self.buffer(bytemuck::cast_slice(&uniform), wgpu::BufferUsages::UNIFORM)?;
         Ok(self.device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("VTX part material"),
@@ -490,6 +514,12 @@ impl UploadTarget {
 }
 
 impl Builder<'_> {
+    fn reserve_components(&mut self, count: usize) -> std::ops::Range<usize> {
+        let start = self.components.len();
+        self.components.resize(start + count, None);
+        start..self.components.len()
+    }
+
     fn add_saved_image(&mut self, path: &Path) -> Result<()> {
         let bytes = super::saved_image::load(path)?;
         let [w,h] = super::saved_image::dimensions(&bytes)?;
@@ -514,8 +544,11 @@ impl Builder<'_> {
 
     fn add_gltf(&mut self, path: &Path) -> Result<()> {
         gltf_mesh::with_desktop_scene(path, |mesh| {
+            let components = (mesh.node_count() > 1)
+                .then(|| self.reserve_components(mesh.node_count()).start);
             let mut textures = HashMap::new();
             for part in mesh.parts() {
+                let component = components.map(|start| [start + part.node]);
                 let texture =
                     if let Some(id) = part.appearance.and_then(|material| material.texture) {
                         textures
@@ -543,6 +576,8 @@ impl Builder<'_> {
                     Style {
                         material: part.appearance,
                         texture,
+                        instances: if component.is_some() { &super::explode::IDENTITY } else { &[] },
+                        components: component.as_ref().map(|c| c.as_slice()),
                         ..Default::default()
                     },
                 )?;
@@ -583,6 +618,7 @@ impl Builder<'_> {
             points: false,
             lines: true,
             obj_corners: false,
+            bounds: [self.min, self.max],
             instances: None,
         });
         self.scene.lines = count;
@@ -598,6 +634,7 @@ impl Builder<'_> {
         &mut self,
         mesh: &solidworks::Mesh,
         instances: &[(three_mf::Instance, bool)],
+        components: Option<&[usize]>,
     ) -> Result<()> {
         self.scene.retain_saved_preview |= mesh.incomplete_decals;
         if mesh.incomplete_decals
@@ -679,6 +716,7 @@ impl Builder<'_> {
                             texture_uv: Some(&uv),
                             decal: true,
                             instances,
+                            components,
                             ..Default::default()
                         },
                     )?;
@@ -720,6 +758,7 @@ impl Builder<'_> {
                     color,
                     transparent: color.is_some_and(|color| color[3] < 255),
                     instances,
+                    components,
                     ..Default::default()
                 },
             )?;
@@ -775,11 +814,26 @@ impl Builder<'_> {
             None
         } else {
             let mut transforms = Vec::with_capacity(style.instances.len());
+            let mut components = Vec::new();
+            let mut bounds = Vec::with_capacity(style.instances.len());
             for mirrored in [false, true] {
-                for &(matrix, _) in style.instances.iter().filter(|(_, flip)| *flip == mirrored) {
+                for (index, &(matrix, flip)) in style.instances.iter().enumerate() {
+                    if flip != mirrored {
+                        continue;
+                    }
                     let (lo, hi) = instance_bounds(matrix, min, max)?;
+                    bounds.push([lo, hi]);
                     self.include_bounds(lo, hi)?;
                     transforms.push(matrix);
+                    if let Some(ids) = style.components {
+                        let id = ids[index];
+                        let bounds = self.components[id].get_or_insert([lo, hi]);
+                        for axis in 0..3 {
+                            bounds[0][axis] = bounds[0][axis].min(lo[axis]);
+                            bounds[1][axis] = bounds[1][axis].max(hi[axis]);
+                        }
+                        components.push(id);
+                    }
                 }
             }
             let count = u32::try_from(transforms.len())?;
@@ -793,14 +847,25 @@ impl Builder<'_> {
             } else {
                 None
             };
+            let mut usage = wgpu::BufferUsages::VERTEX;
+            if !components.is_empty() {
+                usage |= wgpu::BufferUsages::COPY_DST;
+            }
+            let buffer = gpu.buffer(bytemuck::cast_slice(&transforms), usage)?;
+            if !components.is_empty() {
+                self.placements.push(super::explode::PlacementBatch {
+                    buffer: buffer.clone(),
+                    base: transforms,
+                    components: components.clone(),
+                });
+            }
             Some(Instances {
-                transforms: gpu.buffer(
-                    bytemuck::cast_slice(&transforms),
-                    wgpu::BufferUsages::VERTEX,
-                )?,
+                transforms: buffer,
                 count,
                 positive_count,
                 mirrored_indices,
+                components,
+                bounds,
             })
         };
         let positions = gpu.buffer(bytemuck::cast_slice(points), wgpu::BufferUsages::VERTEX)?;
@@ -857,6 +922,7 @@ impl Builder<'_> {
             points: cloud,
             lines: false,
             obj_corners: false,
+            bounds: [min, max],
             instances,
         });
         if cloud {
@@ -923,6 +989,7 @@ impl Builder<'_> {
             points: false,
             lines: false,
             obj_corners: false,
+            bounds: [min, max],
             instances: None,
         });
         self.scene.triangles += batch.triangles;
@@ -954,6 +1021,7 @@ pub fn load(path: &Path, uploader: &UploadTarget) -> Result<Scene> {
     let mut builder = Builder {
         uploader,
         scene: Scene {
+            explosion: None,
             raster_size: None,
             curves: Vec::new(),
             meters_per_unit: None,
@@ -974,6 +1042,8 @@ pub fn load(path: &Path, uploader: &UploadTarget) -> Result<Scene> {
         },
         min: [f32::INFINITY; 3],
         max: [f32::NEG_INFINITY; 3],
+        components: Vec::new(),
+        placements: Vec::new(),
     };
     match path
         .extension()
@@ -1096,6 +1166,7 @@ pub fn load(path: &Path, uploader: &UploadTarget) -> Result<Scene> {
                             points: false,
                             lines: false,
                             obj_corners: true,
+                            bounds: [builder.min, builder.max],
                             instances: None,
                         });
                         builder.scene.triangles += triangle_count;
@@ -1125,12 +1196,26 @@ pub fn load(path: &Path, uploader: &UploadTarget) -> Result<Scene> {
         }
         "3mf" => {
             let model = three_mf::load(path)?;
+            let component_count = model.meshes.iter()
+                .map(|mesh| mesh.component_start + mesh.instances.len().max(1))
+                .max().unwrap_or(0);
+            let first_component = (component_count > 1)
+                .then(|| builder.reserve_components(component_count).start);
             let start = Instant::now();
             let waited = uploader.wait_ms();
             let textures = uploader.load_3mf_textures(model.images, &model.textures)?;
             builder.scene.upload_ms +=
                 start.elapsed().as_secs_f64() * 1000.0 - (uploader.wait_ms() - waited);
             for mesh in &model.meshes {
+                let instances = if component_count > 1 && mesh.instances.is_empty() {
+                    &super::explode::IDENTITY[..]
+                } else {
+                    &mesh.instances
+                };
+                let components: Vec<_> = first_component.map_or_else(Vec::new, |first| {
+                    let start = first + mesh.component_start;
+                    (start..start + instances.len()).collect()
+                });
                 let (texture, texture_uv) =
                     mesh.texture.as_ref().map_or((None, None), |(id, uv)| {
                         (Some(&textures[*id]), Some(uv.as_slice()))
@@ -1145,7 +1230,8 @@ pub fn load(path: &Path, uploader: &UploadTarget) -> Result<Scene> {
                         texture,
                         texture_uv,
                         encoded_texture: true,
-                        instances: &mesh.instances,
+                        instances,
+                        components: (!components.is_empty()).then_some(&components),
                         ..Default::default()
                     },
                 )?;
@@ -1244,7 +1330,7 @@ pub fn load(path: &Path, uploader: &UploadTarget) -> Result<Scene> {
         "dxf" => builder.add_dxf(dxf_drawing::load(path)?)?,
         "sldprt" => {
             let mesh = solidworks::load_part(path)?;
-            builder.add_solidworks(&mesh, &[])?;
+            builder.add_solidworks(&mesh, &[], None)?;
             builder.scene.diagnostics.push("SolidWorks saved appearances and supported projection decals; unresolved mappings retain the saved Explorer image.".into());
         }
         "sldasm" => {
@@ -1259,8 +1345,14 @@ pub fn load(path: &Path, uploader: &UploadTarget) -> Result<Scene> {
             builder.scene.issues += scene.issues;
             builder.scene.diagnostics = scene.diagnostics;
             builder.scene.diagnostics.push("SolidWorks saved appearances and supported projection decals; unresolved mappings retain the saved Explorer image.".into());
+            let count = scene.meshes.iter().map(|part| part.instances.len()).sum::<usize>();
             for part in scene.meshes {
-                builder.add_solidworks(&part.mesh, &part.instances)?;
+                let ids: Vec<_> = if count > 1 {
+                    builder.reserve_components(part.instances.len()).collect()
+                } else {
+                    Vec::new()
+                };
+                builder.add_solidworks(&part.mesh, &part.instances, (!ids.is_empty()).then_some(&ids))?;
             }
         }
         "stp" | "step" | "p21" => {
@@ -1295,15 +1387,39 @@ pub fn load(path: &Path, uploader: &UploadTarget) -> Result<Scene> {
                     .collect()
             });
             builder.scene.issues = stats.num_errors + stats.num_panics;
-            builder.triangle_part(
-                &points,
-                &triangles,
-                false,
-                Style {
-                    colors: colors.as_deref(),
-                    ..Default::default()
-                },
-            )?;
+            if mesh.bodies.len() > 1 {
+                let mut bodies = mesh.bodies;
+                bodies.sort_unstable_by_key(|body| (body.entity, body.placement));
+                let components = builder.reserve_components(bodies.len());
+                for (body, id) in bodies.into_iter().zip(components) {
+                    let vertices = body.vertices;
+                    let base = u32::try_from(vertices.start)?;
+                    let local: Vec<_> = triangles[body.triangles].iter()
+                        .map(|triangle| triangle.map(|index| index - base))
+                        .collect();
+                    builder.triangle_part(
+                        &points[vertices.clone()],
+                        &local,
+                        false,
+                        Style {
+                            colors: colors.as_ref().map(|colors| &colors[vertices]),
+                            instances: &super::explode::IDENTITY,
+                            components: Some(&[id]),
+                            ..Default::default()
+                        },
+                    )?;
+                }
+            } else {
+                builder.triangle_part(
+                    &points,
+                    &triangles,
+                    false,
+                    Style {
+                        colors: colors.as_deref(),
+                        ..Default::default()
+                    },
+                )?;
+            }
         }
         "stl" => builder.add(&read_stl(&fs::read(path)?)?, &[], false, Style::default())?,
         _ => return Err("Unsupported desktop model format".into()),
@@ -1333,6 +1449,12 @@ pub fn load(path: &Path, uploader: &UploadTarget) -> Result<Scene> {
         .sqrt()
         .clamp(1e-7, f32::MAX as f64) as f32;
     builder.scene.gpu_wait_ms = uploader.wait_ms();
+    builder.scene.explosion = super::explode::Explosion::new(
+        builder.components,
+        builder.placements,
+        builder.scene.center,
+        builder.scene.diameter,
+    );
     Ok(builder.scene)
 }
 

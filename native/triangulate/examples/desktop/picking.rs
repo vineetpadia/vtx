@@ -91,7 +91,7 @@ impl Picker {
                     ..Default::default()
                 },
                 depth_stencil: Some(wgpu::DepthStencilState {
-                    format: wgpu::TextureFormat::Depth24Plus,
+                    format: wgpu::TextureFormat::Depth24PlusStencil8,
                     depth_write_enabled: true,
                     depth_compare: wgpu::CompareFunction::LessEqual,
                     stencil: Default::default(),

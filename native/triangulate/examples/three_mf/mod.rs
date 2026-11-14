@@ -47,6 +47,7 @@ pub struct Model {
 }
 
 pub struct Mesh {
+    pub component_start: usize,
     pub points: Vec<[f32; 3]>,
     pub triangles: Vec<Triangle>,
     pub color: Option<Color>,
@@ -857,6 +858,7 @@ impl Document {
         let (points, instances) =
             place_geometry(object.points, &mut object.triangles, &placements, unit);
         Ok(Mesh {
+            component_start: 0,
             points,
             triangles: object.triangles,
             color,
@@ -971,10 +973,13 @@ pub fn load(path: &Path) -> Result<Model> {
     let mut issues = 0;
     let mut meshes = Vec::with_capacity(order.len());
     let mut bank = TextureBank::default();
+    let mut components = 0;
     for key in order {
         let document = documents[key.part].as_mut().unwrap();
         let object = document.objects.remove(&key.id).unwrap();
         let placements = groups.remove(&key).unwrap();
+        let start = meshes.len();
+        let count = placements.len();
         if document.has_texture(&object) {
             meshes.extend(document.textured_meshes(
                 object,
@@ -987,6 +992,10 @@ pub fn load(path: &Path) -> Result<Model> {
         } else {
             meshes.push(document.mesh(object, placements, unit, &mut issues)?);
         }
+        for mesh in &mut meshes[start..] {
+            mesh.component_start = components;
+        }
+        components += count;
     }
     if meshes.is_empty() {
         return Err("3MF build has no mesh triangles".into());

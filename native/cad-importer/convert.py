@@ -140,9 +140,9 @@ def tessellate(shape, face_color=lambda face: None):
     from OCP.BRepCheck import BRepCheck_Analyzer
     from OCP.BRepMesh import BRepMesh_IncrementalMesh
     from OCP.Bnd import Bnd_Box
-    from OCP.TopAbs import TopAbs_EDGE, TopAbs_FACE, TopAbs_REVERSED
+    from OCP.TopAbs import TopAbs_COMPOUND, TopAbs_EDGE, TopAbs_FACE, TopAbs_REVERSED
     from OCP.TopExp import TopExp_Explorer
-    from OCP.TopoDS import TopoDS
+    from OCP.TopoDS import TopoDS, TopoDS_Iterator
     from OCP.TopLoc import TopLoc_Location
     if shape.IsNull() or not BRepCheck_Analyzer(shape).IsValid():
         raise ValueError('CAD conversion did not produce valid geometry.')
@@ -163,12 +163,37 @@ def tessellate(shape, face_color=lambda face: None):
     vertices = 0
     triangles = 0
     faces = 0
-    walker = TopExp_Explorer(shape, TopAbs_FACE)
-    while walker.More():
+    # Compound children carry placement. Shell faces within one body share
+    # the component, even when they use several source colors.
+    def placed_faces(root):
+        pending = [root]
+        component = 0
+        while pending:
+            current = pending.pop()
+            if current.ShapeType() == TopAbs_COMPOUND:
+                iterator = TopoDS_Iterator(current)
+                children = []
+                while iterator.More():
+                    children.append(iterator.Value())
+                    iterator.Next()
+                # IGES can represent one body as a compound of trimmed faces.
+                if any(child.ShapeType() != TopAbs_FACE for child in children):
+                    pending.extend(reversed(children))
+                    continue
+            walker = TopExp_Explorer(current, TopAbs_FACE)
+            if current.ShapeType() == TopAbs_FACE:
+                yield component, TopoDS.Face_s(current)
+            else:
+                while walker.More():
+                    yield component, TopoDS.Face_s(walker.Current())
+                    walker.Next()
+            component += 1
+
+    materials = set()
+    for component, face in placed_faces(shape):
         faces += 1
         if faces > MAX_FACES:
             raise ValueError('CAD face limit exceeded.')
-        face = TopoDS.Face_s(walker.Current())
         location = TopLoc_Location()
         mesh = BRep_Tool.Triangulation_s(face, location)
         if mesh is None or mesh.NbTriangles() == 0:
@@ -176,11 +201,12 @@ def tessellate(shape, face_color=lambda face: None):
         if vertices + mesh.NbNodes() > MAX_VERTICES or triangles + mesh.NbTriangles() > MAX_TRIANGLES:
             raise ValueError('CAD mesh limit exceeded.')
         color = tuple(round(c * 255) for c in (face_color(face) or (0.75, 0.77, 0.80)))
-        if color not in groups:
-            if len(groups) >= 4096:
+        materials.add(color)
+        if (component, color) not in groups:
+            if len(materials) > 4096 or len(groups) >= 65_536:
                 raise ValueError('CAD material limit exceeded.')
-            groups[color] = (array.array('f'), array.array('I'))
-        positions, indices = groups[color]
+            groups[component, color] = (array.array('f'), array.array('I'))
+        positions, indices = groups[component, color]
         base = len(positions) // 3
         transform = location.Transformation()
         for i in range(1, mesh.NbNodes() + 1):
@@ -198,7 +224,6 @@ def tessellate(shape, face_color=lambda face: None):
             indices.extend((base + a - 1, base + b - 1, base + c - 1))
         triangles += mesh.NbTriangles()
         vertices += mesh.NbNodes()
-        walker.Next()
     if not triangles:
         raise ValueError('CAD file contains no drawable faces.')
     return groups, deflection, faces, vertices
@@ -207,11 +232,13 @@ def tessellate(shape, face_color=lambda face: None):
 def write_glb(path: Path, groups):
     data = bytearray()
     views=[];accessors=[]
-    materials=[];primitives=[]
+    materials = []
+    material_ids = {}
+    components = {}
     def linear(c):
         v=c/255
         return v/12.92 if v <= 0.04045 else ((v+0.055)/1.055)**2.4
-    for color, (positions, indices) in groups.items():
+    for (component, color), (positions, indices) in groups.items():
         lows = [min(positions[i::3]) for i in range(3)]
         highs = [max(positions[i::3]) for i in range(3)]
         if sys.byteorder != 'little':
@@ -227,12 +254,18 @@ def write_glb(path: Path, groups):
         views.append(dict(buffer=0, byteOffset=len(data), byteLength=len(indices)*4, target=34963))
         accessors.append(dict(bufferView=len(views)-1, componentType=5125, count=len(indices), type='SCALAR'))
         data.extend(indices.tobytes())
-        material = len(materials)
-        materials.append(dict(pbrMetallicRoughness=dict(baseColorFactor=[*(linear(c) for c in color),1], metallicFactor=0, roughnessFactor=0.7)))
-        primitives.append(dict(attributes={'POSITION':position_accessor},indices=index_accessor,material=material))
+        material = material_ids.get(color)
+        if material is None:
+            material = len(materials)
+            material_ids[color] = material
+            materials.append(dict(pbrMetallicRoughness=dict(baseColorFactor=[*(linear(c) for c in color),1], metallicFactor=0, roughnessFactor=0.7)))
+        components.setdefault(component, []).append(
+            dict(attributes={'POSITION': position_accessor}, indices=index_accessor, material=material)
+        )
+    nodes = [dict(mesh=i) for i in range(len(components))]
     doc = dict(asset=dict(version='2.0', generator='VTX standalone CAD importer'), scene=0,
-        scenes=[dict(nodes=[0])], nodes=[dict(mesh=0)],
-        meshes=[dict(primitives=primitives)], materials=materials,
+        scenes=[dict(nodes=list(range(len(nodes))))], nodes=nodes,
+        meshes=[dict(primitives=primitives) for primitives in components.values()], materials=materials,
         buffers=[dict(byteLength=len(data))],
         bufferViews=views, accessors=accessors)
     metadata = json.dumps(doc, separators=(',', ':')).encode()
@@ -260,7 +293,8 @@ def convert(source: Path, output: Path, report_path: Path):
         write_glb(output, groups)
         exported = time.perf_counter()
         report = dict(schema=1, success=True, complete=True, meters_per_unit=units,
-            notice=notice, vertices=vertices, triangles=sum(len(i)//3 for _, i in groups.values()), materials=len(groups),
+            notice=notice, vertices=vertices, triangles=sum(len(i)//3 for _, i in groups.values()),
+            materials=len({color for _, color in groups}),
             faces=faces, deflection=error, elapsed_ms=(exported-start)*1000,
             phases_ms=dict(read_convert=(converted-start)*1000, mesh=(meshed-converted)*1000, export=(exported-meshed)*1000))
     except Exception as error:

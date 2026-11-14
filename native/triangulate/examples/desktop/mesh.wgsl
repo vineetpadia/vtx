@@ -12,6 +12,7 @@ struct Material {
     base: vec4<f32>,
     flags: vec4<f32>,
     uv_transform: vec4<f32>,
+    section_color: vec4<f32>,
 }
 
 @group(0) @binding(0) var<uniform> camera: Camera;
@@ -186,6 +187,51 @@ fn world_point(eye:vec3<f32>)->vec3<f32>{
 fn clip_surface(eye:vec3<f32>){
     if CLIPPING && dot(camera.clip_plane.xyz,camera.clip_plane.xyz)>0.5 && dot(camera.clip_plane.xyz,world_point(eye))>camera.clip_plane.w {discard;}
 }
+
+@fragment fn section_mask(input: VertexOut) -> @location(0) vec4<f32> {
+    if dot(camera.clip_plane.xyz, world_point(input.eye)) > camera.clip_plane.w { discard; }
+    return vec4(0.0);
+}
+
+@vertex fn section_quad(@builtin(vertex_index) index: u32) -> @builtin(position) vec4<f32> {
+    let x = f32((index << 1u) & 2u);
+    let y = f32(index & 2u);
+    return vec4(x * 2.0 - 1.0, 1.0 - y * 2.0, 0.0, 1.0);
+}
+
+struct SectionOut {
+    @location(0) color: vec4<f32>,
+    @builtin(frag_depth) depth: f32,
+}
+
+@fragment fn section_cap(@builtin(position) pixel: vec4<f32>) -> SectionOut {
+    let ndc = (pixel.xy / camera.viewport.xy * 2.0 - 1.0) * vec2(1.0, -1.0);
+    let xy = ndc * vec2(camera.view.x, 1.0) / 1.85;
+    let ortho = PROJECTION == 1u || (PROJECTION == 2u && camera.viewport.z > 0.5);
+    let origin = select(vec3(0.0, 0.0, 4.0), vec3(xy, 4.0), ortho);
+    let direction = select(vec3(xy * 0.25, -1.0), vec3(0.0, 0.0, -1.0), ortho);
+    let world_origin = world_point(origin);
+    let world_direction = world_point(origin + direction) - world_origin;
+    let normal = camera.clip_plane.xyz;
+    let denominator = dot(normal, world_direction);
+    let safe_denominator = select(denominator, -1e-7, abs(denominator) < 1e-7);
+    let distance = (camera.clip_plane.w - dot(normal, world_origin)) / safe_denominator;
+    let relative = (world_origin - camera.framing.xyz) + world_direction * distance;
+    let stripe = dot(relative, vec3(1.0)) * camera.framing.w * 23.0;
+    let width = fwidth(stripe);
+    let hatch = (1.0 - smoothstep(0.04, 0.12 + width, abs(fract(stripe) - 0.5)))
+        * (1.0 - smoothstep(0.3, 0.7, width));
+    if denominator >= -1e-7 || distance < 0.05 || distance > 100.0 { discard; }
+    let color = select(base_material_color().rgb, linear(material.section_color.rgb), material.section_color.a > 0.5);
+    let brightness = dot(color, vec3(0.2126, 0.7152, 0.0722));
+    let ink = mix(color + vec3(0.06), color * 0.62, smoothstep(0.07, 0.16, brightness));
+    var out: SectionOut;
+    out.color = vec4(mix(color, ink, hatch), 1.0);
+    out.depth = select(100.0 * (distance - 0.05) / (99.95 * distance), distance / 100.0, ortho);
+    return out;
+}
+
+@fragment fn section_clear() -> @location(0) vec4<f32> { return vec4(0.0); }
 @vertex fn vertex(@location(0) p:vec3<f32>,@location(1) x:vec4<f32>,@location(2) y:vec4<f32>,@location(3) z:vec4<f32>,@builtin(vertex_index) i:u32)->VertexOut{return mesh_vertex(p,x,y,z,i);}
 @vertex fn obj_vertex(@location(0) c:vec2<u32>)->VertexOut{return mesh_obj_vertex(c);}
 @vertex fn line_vertex(@location(0) a:vec3<f32>,@location(4) b:vec3<f32>,@location(5) ink:vec4<f32>,@builtin(vertex_index) i:u32)->VertexOut{return mesh_line_vertex(a,b,ink,i);}

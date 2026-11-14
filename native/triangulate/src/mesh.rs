@@ -17,6 +17,15 @@ pub struct Mesh {
     pub verts: Vec<Vertex>,
     pub triangles: Vec<Triangle>,
     pub has_colors: bool,
+    /// Contiguous vertex and triangle ranges for each placed STEP body.
+    pub bodies: Vec<PlacedBody>,
+}
+
+pub struct PlacedBody {
+    pub entity: usize,
+    pub placement: usize,
+    pub vertices: std::ops::Range<usize>,
+    pub triangles: std::ops::Range<usize>,
 }
 
 impl Mesh {
@@ -24,6 +33,12 @@ impl Mesh {
     // (why yes, this _is_ a monoid)
     pub fn combine(mut a: Self, b: Self) -> Self {
         let dv = a.verts.len().try_into().expect("too many triangles");
+        let dt = a.triangles.len();
+        a.bodies.extend(b.bodies.into_iter().map(|mut body| {
+            body.vertices = body.vertices.start + dv as usize..body.vertices.end + dv as usize;
+            body.triangles = body.triangles.start + dt..body.triangles.end + dt;
+            body
+        }));
         a.verts.extend(b.verts);
         a.triangles.extend(b.triangles.into_iter()
             .map(|t| Triangle { verts: t.verts.add_scalar(dv) }));

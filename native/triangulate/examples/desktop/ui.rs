@@ -37,6 +37,8 @@ pub struct PickContext {
     pub additive: bool,
 }
 pub struct Tools {
+    pub markup: super::markup::Markup,
+    pub dragging_explode: bool,
     pub measure: bool,
     pub section: bool,
     pub points: Vec<[f32; 3]>,
@@ -55,7 +57,7 @@ pub struct Tools {
     pub snap: bool,
     pub serial: u64,
     deferred: Option<(Option<[f32; 3]>, PickContext)>,
-    axis: usize,
+    pub(super) axis: usize,
     position: f32,
     flip: bool,
     source_units: Option<f64>,
@@ -67,6 +69,8 @@ pub struct Tools {
 impl Default for Tools {
     fn default() -> Self {
         Self {
+            markup: super::markup::Markup::default(),
+            dragging_explode: false,
             measure: false,
             section: false,
             points: Vec::new(),
@@ -288,6 +292,9 @@ impl Tools {
         name: &str,
     ) -> bool {
         let mut changed = false;
+        let old_explode = camera.explode;
+        let old_explode_layout = camera.legacy_explode;
+        self.dragging_explode = false;
         let available = scene.is_some();
         if !available {
             egui::Area::new(egui::Id::new("empty-state"))
@@ -323,6 +330,34 @@ impl Tools {
                         .clicked()
                     {
                         self.open = true;
+                    }
+                    if let Some(scene) = scene {
+                        if let Some(explosion) = &scene.explosion {
+                            let button = ui.button("Explode");
+                            egui::Popup::menu(&button)
+                                .close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside)
+                                .show(|ui| {
+                                ui.label(format!("{} components", explosion.count));
+                                let mut percent = camera.explode * 100.;
+                                let slider = ui.add(egui::Slider::new(&mut percent, 0.0..=100.0).suffix("%"));
+                                self.dragging_explode = slider.dragged();
+                                let mut amount = percent / 100.;
+                                ui.horizontal(|ui| {
+                                    if ui.button("Assemble").clicked() { amount = 0.; }
+                                    if ui.button("Fit").clicked() {
+                                        camera.frame(scene, size[0] as f32 / size[1].max(1) as f32);
+                                        changed = true;
+                                    }
+                                });
+                                if camera.explode != amount {
+                                    let previous = explosion.framing_scale(scene.diameter, camera.explode);
+                                    let next = explosion.framing_scale(scene.diameter, amount);
+                                    camera.zoom = (camera.zoom * previous / next).clamp(0.05, 30.);
+                                    camera.explode = amount;
+                                    camera.legacy_explode = false;
+                                }
+                            });
+                        }
                     }
                     ui.add_enabled_ui(available && scene.is_some_and(|s| s.raster_size.is_none()), |ui| {
                         if ui
@@ -383,6 +418,11 @@ impl Tools {
                             }
                         });
                     });
+                    if ui.add_enabled(available, egui::Button::new("Annotate").selected(self.markup.open)).clicked() {
+                        self.markup.open = !self.markup.open;
+                        self.markup.placing = false;
+                        self.cancel_pending();
+                    }
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         ui.menu_button("···", |ui| {
                             ui.label(format!("VTX {}", super::updates::VERSION));
@@ -702,27 +742,49 @@ impl Tools {
                     changed |= ui
                         .add(egui::Slider::new(&mut self.position, 0.0..=1.0).show_value(false))
                         .changed();
-                    ui.label(
-                        RichText::new("Visual cut · no generated cap")
-                            .size(11.)
-                            .color(Color32::from_gray(125)),
-                    );
-                    if ui.small_button("Done").clicked() {
-                        self.section = false;
-                        changed = true;
-                    }
+                    ui.horizontal(|ui| {
+                        if ui.small_button("Look at cut").clicked() {
+                            camera.look_at_cut(self.axis, self.flip);
+                            changed = true;
+                        }
+                        if ui.small_button("Clear section").clicked() {
+                            self.section = false;
+                            changed = true;
+                        }
+                    });
                 });
+        }
+        if let Some(scene) = scene {
+            let was_placing = self.markup.placing;
+            if let Some(view) = self.markup.show(ctx, scene, camera, size, tool_frame()) {
+                view.restore(camera);
+                (self.section, self.axis, self.position, self.flip) = view.section();
+                self.cancel_pending();
+                changed = true;
+            }
+            if self.markup.placing && !was_placing {
+                self.measure = false;
+                self.edge_discovery = false;
+                self.clear();
+            }
+        }
+        if old_explode != camera.explode || old_explode_layout != camera.legacy_explode {
+            self.index = None;
+            self.index_failed = false;
+            self.clear();
+            changed = true;
         }
         let old_clip = camera.clip;
         camera.clip = [0.; 4];
         if self.section {
             if let Some(scene) = scene {
                 let sign = if self.flip { -1. } else { 1. };
+                let bounds = scene.exploded_bounds(camera.explode, camera.legacy_explode);
                 camera.clip[self.axis] = sign;
                 camera.clip[3] = sign
-                    * (scene.bounds[0][self.axis]
+                    * (bounds[0][self.axis]
                         + self.position
-                            * (scene.bounds[1][self.axis] - scene.bounds[0][self.axis]));
+                            * (bounds[1][self.axis] - bounds[0][self.axis]));
             }
         }
         changed |= old_clip != camera.clip;
@@ -1111,6 +1173,7 @@ mod tests {
     }
     fn sample_scene(units: Option<f64>) -> Scene {
         Scene {
+            explosion: None,
             raster_size: None,
             curves: Vec::new(),
             meters_per_unit: units,

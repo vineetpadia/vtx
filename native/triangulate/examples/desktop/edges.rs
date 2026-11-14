@@ -197,7 +197,7 @@ pub fn key(camera: &Camera, size: [u32; 2]) -> Vec<u32> {
         .coords
         .iter()
         .copied()
-        .chain([camera.zoom])
+        .chain([camera.zoom, camera.explode, f32::from(u8::from(camera.legacy_explode))])
         .chain(camera.pan)
         .chain(camera.clip)
         .map(f32::to_bits)

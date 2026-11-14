@@ -11,6 +11,8 @@ pub struct Camera {
     pub pan: [f32; 3],
     pub clip: [f32; 4],
     pub orthographic: bool,
+    pub explode: f32,
+    pub legacy_explode: bool,
 }
 fn initial_rotation() -> glm::Quat {
     glm::quat_angle_axis(0.4, &glm::vec3(1., 0., 0.))
@@ -28,6 +30,8 @@ impl Default for Camera {
             pan: [0.; 3],
             clip: [0.; 4],
             orthographic: false,
+            explode: 0.,
+            legacy_explode: false,
         }
     }
 }
@@ -94,6 +98,15 @@ impl Camera {
         self.rotation = glm::quat_normalize(&(delta * self.rotation));
         self.pan = self.to_world(screen_pan).into();
     }
+    pub fn look_at_cut(&mut self, axis: usize, flipped: bool) {
+        let sign = if flipped { -1. } else { 1. };
+        self.rotation = match axis {
+            0 => glm::quat_angle_axis(-sign * std::f32::consts::FRAC_PI_2, &glm::vec3(0., 1., 0.)),
+            1 => glm::quat_angle_axis(sign * std::f32::consts::FRAC_PI_2, &glm::vec3(1., 0., 0.)),
+            _ if flipped => glm::quat_angle_axis(std::f32::consts::PI, &glm::vec3(0., 1., 0.)),
+            _ => glm::quat_identity(),
+        };
+    }
     pub fn zoom_at(
         &mut self,
         exponent: f32,
@@ -129,6 +142,10 @@ impl Camera {
         if !self.cad_lighting && !scene.plan_view {
             return;
         }
+        let bounds = scene.exploded_bounds(self.explode, self.legacy_explode);
+        if self.explode > 0. {
+            self.pan = [0, 1, 2].map(|axis| bounds[0][axis] * 0.5 + bounds[1][axis] * 0.5 - scene.center[axis]);
+        }
         let mut low = 0.;
         let mut high = 8.;
         for _ in 0..24 {
@@ -137,7 +154,7 @@ impl Camera {
             let mut fits = true;
             for corner in 0..8 {
                 let p: [f32; 3] = [0, 1, 2]
-                    .map(|a| (scene.bounds[(corner >> a) & 1][a] - scene.center[a]) * scale);
+                    .map(|a| (bounds[(corner >> a) & 1][a] - scene.center[a] - self.pan[a]) * scale);
                 let p = glm::quat_rotate_vec3(&self.rotation, &glm::vec3(p[0], p[1], p[2]));
                 let w = if self.orthographic {
                     1.
